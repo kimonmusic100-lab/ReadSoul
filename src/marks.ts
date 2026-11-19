@@ -11,13 +11,13 @@ export const Highlight:MarkdownConfig={
 };
 // Use markdown-it's delimiter balancing, so escapes, nesting and code spans retain their native meaning.
 export const highlightPlugin:PluginSimple=md=>{
- md.inline.ruler.before('emphasis','liubai_highlight',(state,silent)=>{
+ md.inline.ruler.before('emphasis','readsoul_highlight',(state,silent)=>{
   if(silent||state.src.slice(state.pos,state.pos+2)!=='=='||state.src[state.pos-1]==='='||state.src[state.pos+2]==='=')return false;
   const start=state.pos,token=state.push('text','',0);token.content='==';
   state.delimiters.push({marker:61,length:0,token:state.tokens.length-1,end:-1,open:!/\s/.test(state.src[start+2]||' '),close:!/\s/.test(state.src[start-1]||' ')});
   state.pos+=2;return true;
  });
- md.inline.ruler2.after('balance_pairs','liubai_highlight',state=>{
+ md.inline.ruler2.after('balance_pairs','readsoul_highlight',state=>{
   const process=(delimiters:typeof state.delimiters)=>{
    for(const start of delimiters){
     if(start.marker!==61||start.end<0)continue;

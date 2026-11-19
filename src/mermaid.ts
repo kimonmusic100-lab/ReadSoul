@@ -31,9 +31,9 @@ interface MermaidAPI {
  render:(id:string,source:string)=>Promise<{svg:string}>;
 }
 export type MermaidRenderer=(source:string,theme:MermaidTheme)=>Promise<MermaidResult>;
-const identifier=()=> 'liubai-mermaid-'+Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
-export const mermaidFont="'Iowan Old Style', 'Songti SC', 'Noto Serif CJK SC', Georgia, serif";
-export function createMermaidRenderer(load:()=>Promise<MermaidAPI>):MermaidRenderer{
+const identifier=()=> 'readsoul-mermaid-'+Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
+const mermaidFont="'Newsreader', '方正FW筑紫明朝 简L', 'Source Han Serif CN', 'Noto Serif SC', Georgia, serif";
+function createMermaidRenderer(load:()=>Promise<MermaidAPI>):MermaidRenderer{
  let api:Promise<MermaidAPI>|undefined,queue=Promise.resolve(),initialized:MermaidTheme|undefined;
  const cache=new Map<string,Promise<MermaidResult>>();
  return (source,theme)=>{
@@ -64,9 +64,9 @@ export function createMermaidRenderer(load:()=>Promise<MermaidAPI>):MermaidRende
 const painted=()=>new Promise<void>(resolve=>{if(typeof requestAnimationFrame!=='function')return resolve();requestAnimationFrame(()=>setTimeout(resolve,0));setTimeout(resolve,200)});
 // This is the only runtime import of Mermaid. A plain document never evaluates it.
 export const renderMermaid=createMermaidRenderer(async()=>{await painted();return (await import('./mermaid-runtime')).default});
-export function mermaidTheme():MermaidTheme{
- const value=typeof document==='undefined'?'paper':document.documentElement.dataset.liubaiTheme;
- return themes.find(t=>t.id===value)?.id||'paper';
+function mermaidTheme():MermaidTheme{
+ const value=typeof document==='undefined'?'onelight':document.documentElement.dataset.readsoulTheme;
+ return themes.find(t=>t.id===value)?.id||'onelight';
 }
 function uniqueSVG(svg:string):string{
  const prefix=identifier(),ids=new Map<string,string>(),tags=/<(?:[^<>"']|"[^"]*"|'[^']*')+>/g;
@@ -97,7 +97,7 @@ export class MermaidMount{
   mounts.set(dom,this);
   if(!fixedTheme&&typeof MutationObserver!=='undefined'){
    this.observer=new MutationObserver(()=>this.update(this.source));
-   this.observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-liubai-theme']});
+   this.observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-readsoul-theme']});
   }
  }
  update(source:string){

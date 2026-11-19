@@ -1,9 +1,9 @@
 import {messages,activeLocale} from './i18n';
-import { EditorState, Compartment, RangeSetBuilder, StateEffect, StateField, type Extension, type Transaction } from '@codemirror/state';
-import { EditorView, Decoration, WidgetType, ViewPlugin, type DecorationSet, type ViewUpdate, keymap, placeholder } from '@codemirror/view';
+import { EditorState, Prec, RangeSetBuilder, StateEffect, StateField, type Extension, type Transaction } from '@codemirror/state';
+import { EditorView, Decoration, WidgetType, ViewPlugin, drawSelection, type DecorationSet, type ViewUpdate, keymap, placeholder } from '@codemirror/view';
 import { history,historyKeymap,defaultKeymap,indentWithTab,undo,redo } from '@codemirror/commands';
 import { markdown,markdownLanguage,markdownKeymap } from '@codemirror/lang-markdown';
-import { languages } from '@codemirror/language-data';
+import { codeLanguages } from './code-languages';
 import { syntaxTree,syntaxHighlighting,HighlightStyle,bracketMatching,indentOnInput } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { searchKeymap,highlightSelectionMatches } from '@codemirror/search';
@@ -11,25 +11,30 @@ import {documentSearch} from './document-find';
 import { GFM } from '@lezer/markdown';
 import type { SyntaxNode } from '@lezer/common';
 import {TableWidget,tableComposition,tableLink} from './table-ui';
-import {ImageWidget,imageSelection,imageSelected} from './image-ui';
+import {ImageWidget,imageSelection,imageSelected,draggingImageSelection,imageDragged} from './image-ui';
 import {imageRanges,tableRanges,mathRanges,mermaidRanges,mapImageRanges} from './images';
 import type { Doc } from './types';
 import {createBlockUI,blockRichMode,type BlockUIOptions} from './block-ui';
 import {createSlashMenu} from './slash';
 import {Highlight,inlineTagPairs,tagHosts} from './marks';
 import {MathSyntax} from './math';
-import {MathWidget} from './math-ui';
+import {MathWidget,MathBlockCardWidget,activeBlockMath,createInlineMathPopover} from './math-ui';
 import {MermaidWidget} from './mermaid-ui';
 import {MermaidSyntax} from './mermaid';
+import {createCaretGlide} from './caret-glide';
+import {createSmartInput} from './smart-input';
+import {createCodeBlockUI} from './code-ui';
+import {createLinkHover,type HoverNoteInfo} from './link-hover';
+import {createFreeImageWrapPlugin} from './image-wrap';
 import {extraRanges,extraMarkers,createDetailsFolding,mapExtraRanges} from './extras';
 import {CalloutWidget,DetailsWidget,FootnoteWidget,detailsExpanded,footnoteInteractions} from './extras-ui';
 import {indentList,safeLink,localDocumentLink,frontMatterRange} from './editing';
 import {WikiSyntax,wikiAt,wikiURL,wikiTarget,wikiNodeAllowed} from './wiki-links';
-import {htmlToMarkdown,pasteText,replacePasteImage,type PasteImage} from './paste';
+import {pasteText,replacePasteImage,type PasteImage} from './paste-utils';
 import {keyLabel} from './platform';
-// Links open on a click with ⌘ on macOS, Ctrl elsewhere.
+// Links open on Ctrl+Click on Windows.
 const linkModifier=keyLabel('Mod');
-// ⌘↖/⌘↑ must rest at the absolute document origin. CodeMirror's implicit scroll effect aligns the first line against the 12px format-bar scroll margin, scrolling the 42px top page padding out of view and stopping ~29px short of scrollTop 0. The .cm-scroller is overflow:visible here, so the real scroller is an ancestor.
+// Ctrl+Home must rest at the absolute document origin. CodeMirror's implicit scroll effect aligns the first line against the 12px format-bar scroll margin, scrolling the 42px top page padding out of view and stopping ~29px short of scrollTop 0. The .cm-scroller is overflow:visible here, so the real scroller is an ancestor.
 function resetScrollToTop(view:EditorView){
  let node:HTMLElement|null=view.scrollDOM;
  while(node){
@@ -43,32 +48,12 @@ function docStart(view:EditorView,extend:boolean){
  return true
 }
 
-export const mode=new Compartment();
-export const editorLocale=new Compartment();
-export function localizedEditor(){return [placeholder(messages.fStartWithASentence()),EditorView.contentAttributes.of({'aria-label':messages.fDocumentText(),'spellcheck':'false'}),EditorState.phrases.of({
+function localizedEditor(){return [placeholder(messages.fStartWithASentence()),EditorView.contentAttributes.of({'aria-label':messages.fDocumentText(),'spellcheck':'false'}),EditorState.phrases.of({
  'next':messages.fNext(),'previous':messages.fPrevious(),'all':messages.fAll(),'match case':messages.fMatchCase(),'regexp':messages.fRegexp(),'by word':messages.fWholeWord(),'replace':messages.fReplace(),'replace all':messages.fReplaceAll(),'Go to line':messages.fGoToLine(),'go':messages.fGo(),'current match':messages.fCurrentMatch(),'on line':messages.fOnLine(),'replaced match on line $':messages.fReplacedOnLine('$'),'replaced $ matches':messages.fReplacements('$'),
  'Find':messages.fFind(),'Replace':messages.fReplace(),'Next':messages.fNext(),'Previous':messages.fPrevious(),'All':messages.fAll(),'Match case':messages.fMatchCase(),'Regular expression':messages.fRegexp(),'By word':messages.fWholeWord(),'Replace all':messages.fReplaceAll(),'close':messages.fClose(),'Find:':messages.fFindLabel(),'Replace:':messages.fReplaceLabel(),
 })]}
-export const setComposing=StateEffect.define<boolean>();
+const setComposing=StateEffect.define<boolean>();
 export const composing=StateField.define<boolean>({create:()=>false,update:(v,tr)=>tr.effects.reduce((a,e)=>e.is(setComposing)?e.value:a,v)});
-export const setFocus=StateEffect.define<boolean>();
-const focusField=StateField.define<boolean>({create:()=>false,update:(v,tr)=>tr.effects.reduce((a,e)=>e.is(setFocus)?e.value:a,v)});
-function activeLines(state:EditorState):DecorationSet{
- if(!state.field(focusField))return Decoration.none;
- let from=state.selection.main.from,to=state.selection.main.to;
- if(from===to){let n=syntaxTree(state).resolveInner(from,-1);while(n.parent&&n.parent.name!=='Document')n=n.parent;if(n.name!=='Document'){from=n.from;to=n.to}}
- const first=state.doc.lineAt(from).number,last=state.doc.lineAt(to).number,b=new RangeSetBuilder<Decoration>();
- for(let i=first;i<=last;i++){const l=state.doc.line(i);b.add(l.from,l.from,Decoration.line({class:'focus-active'}))}return b.finish();
-}
-const focusDecorations=StateField.define<DecorationSet>({
- create:activeLines,
- update(value,tr){
-  if(tr.state.field(composing))return value.map(tr.changes);
-  if(!tr.docChanged&&!tr.selection&&tr.startState.field(focusField)===tr.state.field(focusField)&&!tr.startState.field(composing)&&syntaxTree(tr.startState)===syntaxTree(tr.state))return value;
-  return activeLines(tr.state);
- },
- provide:field=>EditorView.decorations.from(field)
-});
 class TaskWidget extends WidgetType {
  readonly locale=activeLocale;
  constructor(readonly from:number,readonly checked:boolean){super()}
@@ -76,9 +61,25 @@ class TaskWidget extends WidgetType {
  toDOM(view:EditorView){const input=document.createElement('input');input.type='checkbox';input.checked=this.checked;input.className='task-check';input.setAttribute('aria-label',this.checked?messages.fMarkAsIncomplete():messages.fMarkAsComplete());input.onmousedown=e=>e.preventDefault();input.onchange=()=>{if(view.state.readOnly){input.checked=this.checked;return}view.dispatch({changes:{from:this.from,to:this.from+3,insert:input.checked?'[x]':'[ ]'},userEvent:'input.task'});view.focus()};return input}
  ignoreEvent(){return true}
 }
+class HeadingBadgeWidget extends WidgetType {
+ constructor(readonly level:number){super()}
+ eq(o:HeadingBadgeWidget){return o.level===this.level}
+ toDOM(){const span=document.createElement('span');span.className='rs-heading-badge';span.setAttribute('aria-hidden','true');span.textContent='H'+this.level;return span}
+ ignoreEvent(){return true}
+}
+class BulletWidget extends WidgetType {
+ eq(o:BulletWidget){return o instanceof BulletWidget}
+ toDOM(){const span=document.createElement('span');span.className='rs-bullet-dot';span.setAttribute('aria-hidden','true');span.textContent='•';return span}
+ ignoreEvent(){return true}
+}
+class HrWidget extends WidgetType {
+ eq(o:HrWidget){return o instanceof HrWidget}
+ toDOM(){const hr=document.createElement('div');hr.className='rs-hr-line';hr.setAttribute('aria-hidden','true');return hr}
+ ignoreEvent(){return true}
+}
 
 const colours=HighlightStyle.define([
- {tag:tags.heading,color:'var(--foreground)',fontWeight:'600'},
+ {tag:tags.heading,color:'var(--foreground)'},
  {tag:tags.strong,fontWeight:'700'}, {tag:tags.emphasis,fontStyle:'italic'}, {tag:tags.strikethrough,textDecoration:'line-through'},
  {tag:[tags.keyword,tags.bool,tags.null],color:'var(--syntax-keyword)'},
  {tag:[tags.string,tags.regexp],color:'var(--syntax-string)'},
@@ -90,18 +91,23 @@ function selectedLines(state:EditorState){
  const lines=state.selection.ranges.map(sel=>({from:state.doc.lineAt(sel.from).from,to:state.doc.lineAt(sel.to).to}));
  return (from:number,to:number)=>lines.some(line=>from<=line.to&&to>=line.from);
 }
+function inlineImageTouched(state:EditorState,from:number,to:number){
+ return state.selection.ranges.some(sel=>sel.empty?(sel.head>from&&sel.head<to):(sel.from<to&&sel.to>from));
+}
 function destination(state:EditorState,node:SyntaxNode){
  const url=node.getChild('URL');if(!url)return '';
  return state.sliceDoc(url.from,url.to).replace(/^<(.*)>$/s,'$1').replace(/\\([!-/:-@[-`{-~])/g,'$1');
 }
-export function blockDecorations(state:EditorState,resolve:(dest:string)=>Promise<string>):DecorationSet{
+function blockDecorations(state:EditorState,resolve:(dest:string)=>Promise<string>):DecorationSet{
  const decorations:{from:number;to:number;dec:Decoration}[]=[],touched=selectedLines(state),meta=frontMatterRange(state);
  // A block on the document's unterminated last line can never be left by its caret, so an empty cursor parked right after the syntax is not an editing position. Mount it as an inline replacement there: the line's widget buffers keep a text-caret home, so typing still lands in the document. Moving into the syntax or selecting text reveals its source as usual.
  const restingAtEnd=(from:number,to:number)=>{const sel=state.selection.main;return to===state.doc.length&&from<to&&sel.empty&&sel.head===to&&touched(from,to)};
  for(const image of imageRanges(state)){
-  const rest=restingAtEnd(image.from,image.to);
-  if(meta&&image.from<meta.to||touched(image.from,image.to)&&!imageSelected(state,image.from)&&!rest)continue;
-  decorations.push({from:image.from,to:image.to,dec:Decoration.replace({widget:new ImageWidget(image.raw,image.from,resolve,composing,imageSelected(state,image.from),state.readOnly,image.quotes,image.listEms),block:!rest})});
+  const dragged=imageDragged(state,image.from);
+  const rest=image.image.wrap==='float'||image.image.wrap==='free'||!!image.inline||restingAtEnd(image.from,image.to);
+  const revealed=(image.inline||image.image.wrap==='free')?inlineImageTouched(state,image.from,image.to):touched(image.from,image.to);
+  if(meta&&image.from<meta.to||revealed&&!imageSelected(state,image.from)&&!dragged&&!restingAtEnd(image.from,image.to))continue;
+  decorations.push({from:image.from,to:image.to,dec:Decoration.replace({widget:new ImageWidget(image.raw,image.from,resolve,composing,imageSelected(state,image.from),state.readOnly,image.quotes,image.listEms,dragged,!!image.inline),block:!rest})});
  }
  for(const table of tableRanges(state)){
   if(meta&&table.from<meta.to)continue;
@@ -109,8 +115,10 @@ export function blockDecorations(state:EditorState,resolve:(dest:string)=>Promis
  }
  for(const formula of mathRanges(state)){
   const rest=restingAtEnd(formula.from,formula.to);
-  if(meta&&formula.from<meta.to||touched(formula.from,formula.to)&&!rest)continue;
-  decorations.push({...formula,dec:Decoration.replace({widget:new MathWidget(formula.source,true,formula.from,composing),block:!rest})});
+  if(meta&&formula.from<meta.to)continue;
+  const sel=state.selection.main,activePos=state.field(activeBlockMath,false)??null;
+  const cardEditing=!state.readOnly&&((sel.empty&&sel.head>formula.from&&sel.head<formula.to)||(activePos!==null&&activePos>=formula.from&&activePos<=formula.to));
+  decorations.push({...formula,dec:Decoration.replace({widget:cardEditing?new MathBlockCardWidget(formula.source,state.sliceDoc(formula.from,formula.to),formula.from,formula.to):new MathWidget(formula.source,true,formula.from,composing,formula.to,false),block:!rest})});
  }
  for(const diagram of mermaidRanges(state)){
   const rest=restingAtEnd(diagram.from,diagram.to);
@@ -132,26 +140,26 @@ function proseEdit(tr:Transaction){
  });
  return safe&&tr.state.selection.ranges.every(sel=>sel.empty&&paragraphs.some(node=>node.from<=sel.head&&sel.head<=node.to));
 }
-export function createBlockField(resolve:(dest:string)=>Promise<string>):StateField<DecorationSet>{
+function createBlockField(resolve:(dest:string)=>Promise<string>):StateField<DecorationSet>{
  return StateField.define<DecorationSet>({
   create:state=>blockDecorations(state,resolve),
   update(value,tr){
    if(tr.state.field(composing))return value.map(tr.changes);
    const prose=proseEdit(tr);if(prose)mapExtraRanges(tr.startState,tr.state,tr.changes);
    if(prose&&mapImageRanges(tr.startState,tr.state,tr.changes))return blockDecorations(tr.state,resolve);
-   if(!tr.docChanged&&!tr.selection&&tr.startState.field(imageSelection,false)===tr.state.field(imageSelection,false)&&tr.startState.readOnly===tr.state.readOnly&&!tr.startState.field(composing)&&syntaxTree(tr.startState)===syntaxTree(tr.state))return value;
+   if(!tr.docChanged&&!tr.selection&&tr.startState.field(imageSelection,false)===tr.state.field(imageSelection,false)&&tr.startState.field(draggingImageSelection,false)===tr.state.field(draggingImageSelection,false)&&tr.startState.field(activeBlockMath,false)===tr.state.field(activeBlockMath,false)&&tr.startState.readOnly===tr.state.readOnly&&!tr.startState.field(composing)&&syntaxTree(tr.startState)===syntaxTree(tr.state))return value;
    return blockDecorations(tr.state,resolve);
   },
   provide:field=>EditorView.decorations.from(field)
  });
 }
-export function inlineDecorations(state:EditorState,ranges:readonly {from:number;to:number}[]):DecorationSet{
- const decorations:{from:number;to:number;dec:Decoration}[]=[],touched=selectedLines(state),marked=new Set<string>(),meta=frontMatterRange(state),images=imageRanges(state).filter(i=>ranges.some(range=>i.from<=range.to&&i.to>=range.from)&&(!touched(i.from,i.to)||imageSelected(state,i.from)));
+function inlineDecorations(state:EditorState,ranges:readonly {from:number;to:number}[]):DecorationSet{
+ const decorations:{from:number;to:number;dec:Decoration}[]=[],touched=selectedLines(state),marked=new Set<string>(),meta=frontMatterRange(state),images=imageRanges(state).filter(i=>ranges.some(range=>i.from<=range.to&&i.to>=range.from)&&(!(i.inline?inlineImageTouched(state,i.from,i.to):touched(i.from,i.to))||imageSelected(state,i.from)||imageDragged(state,i.from)));
  const diagrams=mermaidRanges(state).filter(d=>!touched(d.from,d.to));
  const tables=tableRanges(state);
  const extras=extraRanges(state),numbers=new Map<string,number>();
  for(const ref of extras.references)if(extras.definitions.has(ref.label)&&!numbers.has(ref.label))numbers.set(ref.label,numbers.size+1);
- const active=(from:number,to:number)=>state.selection.ranges.some(sel=>sel.from<=to&&sel.to>=from);
+ const active=(from:number,to:number)=>state.selection.ranges.some(sel=>sel.empty?(sel.head>from&&sel.head<to):(sel.from<to&&sel.to>from));
  // Footnote syntax that carries no link meaning must stay literal (the preview/Markdown renders it as
  // source text): an undefined [^label] reference and the [^label]: token of every block definition.
  // Lezer has no dedicated footnote parse for an undefined ref or a second definition stacked without a
@@ -202,16 +210,22 @@ export function inlineDecorations(state:EditorState,ranges:readonly {from:number
    if(tagHosts.test(name))for(const pair of inlineTagPairs(n.node,(a,b)=>state.sliceDoc(a,b))){
     const key=pair.from+':tag';if(marked.has(key))continue;marked.add(key);
     if(pair.closeFrom>pair.openTo)decorations.push({from:pair.openTo,to:pair.closeFrom,dec:Decoration.mark({class:pair.tag==='u'?'md-underline':'md-'+pair.tag})});
-    if(!active(pair.from,pair.to))for(const [from,to] of [[pair.from,pair.openTo],[pair.closeFrom,pair.to]])decorations.push({from,to,dec:Decoration.replace({})});
+    const tagDec=active(pair.from,pair.to)?Decoration.mark({class:'rs-md-mark-ghost'}):Decoration.replace({});
+    for(const [from,to] of [[pair.from,pair.openTo],[pair.closeFrom,pair.to]])decorations.push({from,to,dec:tagDec});
    }
    if(name==='MathBlock'||name==='MathFence'||diagrams.some(d=>n.from>=d.from&&n.to<=d.to))return false;
    if(name==='InlineMath'){
-    if(!touched(n.from,n.to)&&!marked.has(n.from+':math')){marked.add(n.from+':math');decorations.push({from:n.from,to:n.to,dec:Decoration.replace({widget:new MathWidget(state.sliceDoc(n.from+1,n.to-1),false,n.from,composing)})})}
+    if(!marked.has(n.from+':math')){
+     marked.add(n.from+':math');
+     const editing=!state.readOnly&&state.selection.ranges.some(sel=>sel.empty&&sel.head>n.from&&sel.head<n.to);
+     decorations.push({from:n.from,to:n.to,dec:Decoration.replace({widget:new MathWidget(state.sliceDoc(n.from+1,n.to-1),false,n.from,composing,n.to,editing)})});
+    }
     return false;
    }
    if(name==='Highlight'){
     const marks=n.node.getChildren('HighlightMark');if(marks.length===2)decorations.push({from:marks[0].to,to:marks[1].from,dec:Decoration.mark({class:'md-highlight'})});
-    if(!active(n.from,n.to))for(const mark of marks)decorations.push({from:mark.from,to:mark.to,dec:Decoration.replace({})});
+    const markDec=active(n.from,n.to)?Decoration.mark({class:'rs-md-mark-ghost'}):Decoration.replace({});
+    for(const mark of marks)decorations.push({from:mark.from,to:mark.to,dec:markDec});
    }
    if(name==='Table')return false;
    if(/^ATXHeading[1-6]$/.test(name))lineClass(n.from,n.from,'md-heading md-h'+name.slice(-1));
@@ -223,68 +237,144 @@ export function inlineDecorations(state:EditorState,ranges:readonly {from:number
     const match=wikiAt(state.sliceDoc(n.from,n.to),0);
     if(match){
      add(Decoration.mark({class:'md-link md-wiki-link',attributes:{'data-href':wikiURL(match.target),title:messages.fCtrlClickToOpenTheLink(linkModifier)}}));
-     if(!active(n.from,n.to))for(const mark of n.node.getChildren('WikiMark'))decorations.push({from:mark.from,to:mark.to,dec:Decoration.replace({})});
+     const wDec=active(n.from,n.to)?Decoration.mark({class:'rs-md-mark-ghost'}):Decoration.replace({});
+     for(const mark of n.node.getChildren('WikiMark'))decorations.push({from:mark.from,to:mark.to,dec:wDec});
     }
     return false;
    }
    if((name==='Link'||name==='LinkReference')&&inLiteral(n.from,n.to))return false;
    if(name==='Link')add(Decoration.mark({class:'md-link',attributes:{'data-href':destination(state,n.node),title:messages.fCtrlClickToOpenTheLink(linkModifier)}}));
    if(name==='InlineCode')add(Decoration.mark({class:'md-inline-code'}));
-   if(!touched(n.from,n.to)){
-    if(name==='TaskMarker'){add(Decoration.replace({widget:new TaskWidget(n.from,state.sliceDoc(n.from,n.to).toLowerCase()==='[x]')}));return false}
-    if((n.node.parent?.name==='Link'&&['LinkMark','URL','LinkTitle'].includes(name))||['HeaderMark','EmphasisMark','CodeMark','QuoteMark','StrikethroughMark'].includes(name))add(Decoration.replace({}));
+   const selectingAcross=(from:number,to:number)=>state.selection.ranges.some(sel=>!sel.empty&&sel.from<to&&sel.to>from);
+   if(name==='HorizontalRule'&&!touched(n.from,n.to)){
+    decorations.push({from:n.from,to:n.to,dec:Decoration.replace({widget:new HrWidget()})});
+    return false;
+   }
+   if(name==='TaskMarker'&&!selectingAcross(n.from,n.to)){
+    decorations.push({from:n.from,to:n.to,dec:Decoration.replace({widget:new TaskWidget(n.from,state.sliceDoc(n.from,n.to).toLowerCase()==='[x]')})});
+    return false;
+   }
+   if(name==='HeaderMark'&&n.node.parent&&/^ATXHeading([1-6])$/.test(n.node.parent.name)){
+    const hideTo=state.sliceDoc(n.to,n.to+1)===' '||state.sliceDoc(n.to,n.to+1)==='\t'?n.to+1:n.to;
+    if(!selectingAcross(n.from,hideTo)&&n.from===n.node.parent.from){
+     const level=Number(n.node.parent.name.slice(-1))||1;
+     decorations.push({from:n.from,to:hideTo,dec:Decoration.replace({widget:new HeadingBadgeWidget(level),side:-1})});
+    }
+   }
+   if(name==='QuoteMark'){
+    const hideTo=state.sliceDoc(n.to,n.to+1)===' '?n.to+1:n.to;
+    if(!selectingAcross(n.from,hideTo))decorations.push({from:n.from,to:hideTo,dec:Decoration.replace({side:-1})});
+   }
+   if(name==='ListMark'&&n.node.parent?.name==='ListItem'){
+    const hasTask=!!n.node.parent.getChild('Task');
+    const hideTo=state.sliceDoc(n.to,n.to+1)===' '?n.to+1:n.to;
+    if(hasTask){
+     if(!selectingAcross(n.from,hideTo))decorations.push({from:n.from,to:hideTo,dec:Decoration.replace({side:-1})});
+    }else if(/^[-+*]$/.test(state.sliceDoc(n.from,n.to))){
+     if(!selectingAcross(n.from,hideTo))decorations.push({from:n.from,to:hideTo,dec:Decoration.replace({widget:new BulletWidget(),side:-1})});
+    }
+   }
+   const parent=n.node.parent;
+   if(parent){
+    const isLinkPart=parent.name==='Link'&&['LinkMark','URL','LinkTitle'].includes(name);
+    const isInlineMark=['EmphasisMark','CodeMark','StrikethroughMark'].includes(name);
+    if(isLinkPart||isInlineMark){
+     if(!active(parent.from,parent.to))add(Decoration.replace({}));
+     else add(Decoration.mark({class:isLinkPart&&(name==='URL'||name==='LinkTitle')?'rs-md-mark-ghost rs-md-mark-url':'rs-md-mark-ghost'}));
+    }
    }
   }});
  }
  const builder=new RangeSetBuilder<Decoration>();decorations.sort((a,b)=>a.from-b.from||a.dec.startSide-b.dec.startSide||a.to-b.to);
  for(const r of decorations)builder.add(r.from,r.to,r.dec);return builder.finish();
 }
-export function richExtensions(resolve:(dest:string)=>Promise<string>):Extension{
+function richExtensions(resolve:(dest:string)=>Promise<string>):Extension{
  const inlinePlugin=ViewPlugin.fromClass(class{
   decorations:DecorationSet;
   constructor(view:EditorView){this.decorations=inlineDecorations(view.state,view.visibleRanges)}
   update(update:ViewUpdate){
    if(update.state.field(composing)){this.decorations=this.decorations.map(update.changes);return}
-   if(update.docChanged||update.viewportChanged||update.selectionSet||update.startState.field(imageSelection,false)!==update.state.field(imageSelection,false)||update.startState.field(composing)||update.transactions.some(tr=>tr.effects.length)||syntaxTree(update.startState)!==syntaxTree(update.state))this.decorations=inlineDecorations(update.state,update.view.visibleRanges);
+   if(update.docChanged||update.viewportChanged||update.selectionSet||update.startState.field(imageSelection,false)!==update.state.field(imageSelection,false)||update.startState.field(draggingImageSelection,false)!==update.state.field(draggingImageSelection,false)||update.startState.field(composing)||update.transactions.some(tr=>tr.effects.length)||syntaxTree(update.startState)!==syntaxTree(update.state))this.decorations=inlineDecorations(update.state,update.view.visibleRanges);
   }
  },{decorations:plugin=>plugin.decorations});
- return [blockRichMode.of(true),imageSelection,extraMarkers,createDetailsFolding(composing),footnoteInteractions(composing),createBlockField(resolve),inlinePlugin];
+ return [blockRichMode.of(true),imageSelection,draggingImageSelection,createFreeImageWrapPlugin(),createInlineMathPopover(),createCodeBlockUI(),extraMarkers,createDetailsFolding(composing),footnoteInteractions(composing),createBlockField(resolve),inlinePlugin];
 }
-export function createEditor(parent:HTMLElement,doc:Doc,resolve:(dest:string)=>Promise<string>,onChange:(content:boolean)=>void,onImage:(files:File[],position?:number)=>void,onCompose:(active:boolean)=>void,onLink:(url:string)=>void,onOpenFiles:(files:File[])=>void,onPasteImage:(image:PasteImage)=>Promise<string>,onPasteError:(error:unknown)=>void,blocks?:BlockUIOptions){
+export function createEditor(parent:HTMLElement,doc:Doc,resolve:(dest:string)=>Promise<string>,onChange:(content:boolean)=>void,onImage:(files:File[],position?:number)=>void,onCompose:(active:boolean)=>void,onLink:(url:string)=>void,onOpenFiles:(files:File[])=>void,onPasteImage:(image:PasteImage)=>Promise<string>,onPasteError:(error:unknown)=>void,blocks?:BlockUIOptions,autoSpace:()=>boolean=()=>true,linkHover?:{onEdit?:(pos:number)=>void;resolveWiki?:(target:string)=>Promise<HoverNoteInfo|null>}){
+ let lastEnterKeyTime=0;
  const state=EditorState.create({doc:doc.content,selection:{anchor:Math.min(doc.position.anchor||0,doc.content.length),head:Math.min(doc.position.head||0,doc.content.length)},extensions:[
+  EditorState.allowMultipleSelections.of(true),
+  drawSelection({cursorBlinkRate:0}),
   tableComposition.of((view,active,commit)=>{view.dispatch({effects:setComposing.of(active)});commit?.();onCompose(active)}),
   tableLink.of(onLink),
-  history(),composing,focusField,focusDecorations,createSlashMenu(composing,focusField,()=>blocks?.action('image')),blocks?createBlockUI(composing,focusField,blocks):[],markdown({base:markdownLanguage,codeLanguages:languages,extensions:[GFM,Highlight,MathSyntax,MermaidSyntax,WikiSyntax]}),syntaxHighlighting(colours),bracketMatching(),indentOnInput(),highlightSelectionMatches(),documentSearch,
-  EditorView.editorAttributes.of(view=>({class:view.state.field(focusField)?'cm-focus-on':''})),
-  // ⌘U underlines and ⌘I italicizes like the toolbar, so CodeMirror's undo-selection and select-parent bindings are dropped.
-  keymap.of([{key:'Mod-Home',run:v=>docStart(v,false),shift:v=>docStart(v,true)},{mac:'Cmd-ArrowUp',run:v=>docStart(v,false),shift:v=>docStart(v,true)},...(blocks?[{key:'Alt-Shift-ArrowUp',run:()=>{blocks.action('up');return true}},{key:'Alt-Shift-ArrowDown',run:()=>{blocks.action('down');return true}},{key:'Mod-/',run:()=>{blocks.action('menu');return true}}]:[]),...([1,-1] as const).map(direction=>({key:direction>0?'Tab':'Shift-Tab',run:(view:EditorView)=>{if(view.composing||view.state.field(composing)||view.state.readOnly)return false;const spec=indentList(view.state,direction);if(!spec)return false;view.dispatch(spec);return true}})),...markdownKeymap,...historyKeymap.filter(binding=>binding.key!=='Mod-u'),...searchKeymap.filter(binding=>binding.key==='Mod-Alt-g'),...defaultKeymap.filter(binding=>binding.key!=='Mod-i'),indentWithTab]),
-  mode.of(doc.position.source?[]:richExtensions(resolve)),EditorView.lineWrapping,editorLocale.of(localizedEditor()),
+  history(),composing,createSmartInput(composing,autoSpace),createCaretGlide(),createLinkHover({onOpen:onLink,onEdit:linkHover?.onEdit,resolveWiki:linkHover?.resolveWiki}),createSlashMenu(composing,()=>blocks?.action('image')),blocks?createBlockUI(composing,blocks):[],markdown({base:markdownLanguage,codeLanguages,extensions:[GFM,Highlight,MathSyntax,MermaidSyntax,WikiSyntax]}),syntaxHighlighting(colours),bracketMatching(),indentOnInput(),highlightSelectionMatches(),documentSearch,
+  // Ctrl+U underlines and Ctrl+I italicizes like the toolbar, so CodeMirror's undo-selection and select-parent bindings are dropped.
+  keymap.of([{key:'Mod-Home',run:v=>docStart(v,false),shift:v=>docStart(v,true)},...(blocks?[{key:'Alt-Shift-ArrowUp',run:()=>{blocks.action('up');return true}},{key:'Alt-Shift-ArrowDown',run:()=>{blocks.action('down');return true}},{key:'Mod-/',run:()=>{blocks.action('menu');return true}}]:[]),...([1,-1] as const).map(direction=>({key:direction>0?'Tab':'Shift-Tab',run:(view:EditorView)=>{if(view.composing||view.state.field(composing)||view.state.readOnly)return false;const spec=indentList(view.state,direction);if(!spec)return false;view.dispatch(spec);return true}})),...markdownKeymap,...historyKeymap.filter(binding=>binding.key!=='Mod-u'),...searchKeymap.filter(binding=>binding.key==='Mod-Alt-g'),...defaultKeymap.filter(binding=>binding.key!=='Mod-i'),indentWithTab]),
+  richExtensions(resolve),EditorView.lineWrapping,localizedEditor(),
   EditorView.updateListener.of(u=>{if(u.docChanged||u.selectionSet)onChange(u.docChanged)}),
+  EditorView.domEventObservers({
+   keydown:(event,v)=>{
+    if(event.key==='Enter'&&!event.isComposing&&!v.composing&&!v.state.field(composing)){
+     lastEnterKeyTime=performance.now();
+    }
+   },
+  }),
+  Prec.highest(EditorView.domEventHandlers({
+   beforeinput:(event)=>{
+    if((event.inputType==='insertParagraph'||event.inputType==='insertLineBreak')&&performance.now()-lastEnterKeyTime<120&&!/Android|iPhone|iPad/i.test(navigator.userAgent)){
+     event.preventDefault();
+     return true;
+    }
+    return false;
+   },
+  })),
+  EditorState.transactionFilter.of(tr=>{
+   if(!tr.docChanged||!tr.isUserEvent('input.type')||performance.now()-lastEnterKeyTime>=120)return tr;
+   let onlyNewline=true;
+   tr.changes.iterChanges((f,t,_fb,_tb,ins)=>{
+    if(f!==t||!/^\n+$/.test(ins.toString()))onlyNewline=false;
+   });
+   if(onlyNewline){
+    lastEnterKeyTime=0;
+    return [];
+   }
+   return tr;
+  }),
   EditorView.domEventHandlers({
    compositionstart:(_e,v)=>{v.dispatch({effects:setComposing.of(true)});onCompose(true);return false},
    compositionend:(_e,v)=>{setTimeout(()=>{if(v.dom.isConnected){v.dispatch({effects:setComposing.of(false)});onCompose(false)}},0);return false},
-   click:(event,v)=>{if(v.composing||v.state.field(composing))return false;const a=(event.target as HTMLElement).closest<HTMLElement>('[data-href]');if(a&&(event.metaKey||event.ctrlKey)&&(wikiTarget(a.dataset.href||'')||safeLink(a.dataset.href||'')||localDocumentLink(a.dataset.href||''))){event.preventDefault();onLink(a.dataset.href!);return true}return false},
+   click:(event,v)=>{if(v.composing||v.state.field(composing))return false;const a=(event.target as HTMLElement).closest<HTMLElement>('[data-href]');if(a&&event.ctrlKey&&!event.metaKey&&(wikiTarget(a.dataset.href||'')||safeLink(a.dataset.href||'')||localDocumentLink(a.dataset.href||''))){event.preventDefault();onLink(a.dataset.href!);return true}return false},
    paste:(event,view)=>{
     if(view.state.readOnly)return false;
     const clipboard=event.clipboardData,files=Array.from(clipboard?.files||[]).filter(f=>f.type.startsWith('image/'));
     if(files.length){event.preventDefault();onImage(files);return true}
     const html=clipboard?.getData('text/html');if(!html)return false;
-    try{
-     const result=htmlToMarkdown(html,clipboard?.getData('text/plain')||'');
-     event.preventDefault();view.dispatch(pasteText(view.state,result.markdown));
-     void (async()=>{for(const image of result.images){
-      let text:string;try{text=await onPasteImage(image)}catch(error){text=image.alt;onPasteError(error)}
-      if(!view.dom.isConnected)break;
-      const from=view.state.doc.toString().indexOf(image.placeholder);if(from<0)continue;
-      view.dispatch(replacePasteImage(view.state,image.placeholder,text));
-     }})();return true;
-    }catch(error){onPasteError(error);return false}
+    const plain=clipboard?.getData('text/plain')||'';
+    event.preventDefault();
+    void (async()=>{
+     try{
+      const {htmlToMarkdown}=await import('./paste');
+      if(!view.dom.isConnected)return;
+      const result=htmlToMarkdown(html,plain);
+      view.dispatch(pasteText(view.state,result.markdown));
+      for(const image of result.images){
+       let text:string;try{text=await onPasteImage(image)}catch(error){text=image.alt;onPasteError(error)}
+       if(!view.dom.isConnected)break;
+       const from=view.state.doc.toString().indexOf(image.placeholder);if(from<0)continue;
+       view.dispatch(replacePasteImage(view.state,image.placeholder,text));
+      }
+     }catch(error){
+      if(plain&&view.dom.isConnected)view.dispatch(pasteText(view.state,plain));
+      onPasteError(error);
+     }
+    })();
+    return true;
    },
    drop:(event,view)=>{
     const files=Array.from(event.dataTransfer?.files||[]),documents=files.filter(f=>/\.(md|markdown|mdown|mkd|txt)$/i.test(f.name));
     if(documents.length){event.preventDefault();onOpenFiles(documents);return true}
     const images=files.filter(f=>f.type.startsWith('image/'));if(images.length){event.preventDefault();onImage(images,view.posAtCoords({x:event.clientX,y:event.clientY})??undefined);return true}return false;
    }})
- ]});return new EditorView({state,parent});
+ ]});
+ return new EditorView({state,parent});
 }
 export {undo,redo,EditorState,EditorView};

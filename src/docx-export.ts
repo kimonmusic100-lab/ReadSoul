@@ -1,4 +1,4 @@
-import {Document,Paragraph,TextRun,Tab,ExternalHyperlink,InternalHyperlink,Bookmark,ImageRun,Table,TableRow,TableCell,FootnoteReferenceRun,Packer,HeadingLevel,AlignmentType,LevelFormat,BorderStyle,WidthType,Math as WordMath,MathRun,MathFraction,MathSuperScript,MathSubScript,MathSubSuperScript,MathRadical,MathLimitLower,MathLimitUpper,BuilderElement,StringContainer,type MathComponent,type ParagraphChild,type IRunOptions,type IParagraphOptions,type INumberingOptions} from 'docx';
+import {Document,Paragraph,TextRun,Tab,ExternalHyperlink,InternalHyperlink,Bookmark,ImageRun,Table,TableRow,TableCell,FootnoteReferenceRun,Packer,HeadingLevel,AlignmentType,LevelFormat,BorderStyle,WidthType,TextWrappingType,TextWrappingSide,HorizontalPositionRelativeFrom,HorizontalPositionAlign,VerticalPositionRelativeFrom,Math as WordMath,MathRun,MathFraction,MathSuperScript,MathSubScript,MathSubSuperScript,MathRadical,MathLimitLower,MathLimitUpper,BuilderElement,StringContainer,type MathComponent,type ParagraphChild,type IRunOptions,type IParagraphOptions,type INumberingOptions,type IFloating} from 'docx';
 
 // A4, one-inch (Word Normal) margins. Word uses twips; drawings use pixels at 96 dpi.
 const pageWidth=11906,pageHeight=16838,margin=1440,textWidth=pageWidth-margin*2;
@@ -50,36 +50,72 @@ function bytesFromURL(src:string):Uint8Array{
 async function decoded(src:string):Promise<HTMLImageElement>{
  return new Promise((resolve,reject)=>{const image=new Image(),timer=setTimeout(()=>reject(Error('Image decode timeout')),10000);image.onload=()=>{clearTimeout(timer);resolve(image)};image.onerror=()=>{clearTimeout(timer);reject(Error('Image decode failed'))};image.src=src});
 }
-async function imageRun(element:Element,width:number):Promise<ImageRun>{
- const svg=element.localName==='svg',view=svg?(element.getAttribute('viewBox')||'').trim().split(/[ ,]+/).map(Number):[],source=element.getAttribute('src')||'';
- // Percent encoding avoids both btoa's Latin-1 restriction and argument limits on large diagrams.
- let src=svg?'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(element)):source;
- if(!src.startsWith('data:'))throw Error('Unresolved image');
- let naturalWidth=0,naturalHeight=0;
- if(svg){
-  naturalWidth=parseFloat(element.getAttribute('width')||'')||view[2]||640;naturalHeight=parseFloat(element.getAttribute('height')||'')||view[3]||320;
-  // Mermaid often writes width="100%". Its viewBox defines the actual pixel dimensions.
-  if(element.getAttribute('width')?.endsWith('%'))naturalWidth=view[2]||640;
-  const copy=element.cloneNode(true) as Element;copy.setAttribute('width',String(naturalWidth));copy.setAttribute('height',String(naturalHeight));copy.setAttribute('xmlns','http://www.w3.org/2000/svg');
-  src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(copy));
+ function wrapOptionsFromElement(element:Element,displayWidth:number,containerWidthPx:number):IFloating|undefined{
+  const wrapAttr=(element as HTMLElement).dataset?.wrap;
+  const wrap:'left'|'right'|'free'|undefined=wrapAttr==='left'||wrapAttr==='right'||wrapAttr==='free'
+   ?wrapAttr
+   :element.classList.contains('md-wrap-left')
+    ?'left'
+    :element.classList.contains('md-wrap-right')
+     ?'right'
+     :element.classList.contains('md-wrap-free')
+      ?'free'
+      :undefined;
+  if(!wrap)return undefined;
+  const xPercent=Math.max(0,Math.min(100,Number(element.getAttribute('data-x')||'50')||50));
+  const horizontalPosition=wrap==='left'
+   ?{relative:HorizontalPositionRelativeFrom.COLUMN,align:HorizontalPositionAlign.LEFT}
+   :wrap==='right'
+    ?{relative:HorizontalPositionRelativeFrom.COLUMN,align:HorizontalPositionAlign.RIGHT}
+    :{relative:HorizontalPositionRelativeFrom.COLUMN,offset:Math.round((xPercent/100)*Math.max(0,(containerWidthPx-displayWidth)*9525))};
+  return {
+   horizontalPosition,
+   verticalPosition:{relative:VerticalPositionRelativeFrom.PARAGRAPH,offset:0},
+   wrap:{
+    type:TextWrappingType.SQUARE,
+    side:wrap==='left'?TextWrappingSide.RIGHT:wrap==='right'?TextWrappingSide.LEFT:TextWrappingSide.BOTH_SIDES,
+   },
+   margins:{top:76200,bottom:76200,left:114300,right:114300},
+  };
  }
- const image=await decoded(src);naturalWidth ||= image.naturalWidth;naturalHeight ||= image.naturalHeight;
- const explicit=svg?naturalWidth:Number(element.getAttribute('width'))||naturalWidth,displayWidth=Math.min(explicit,width/15),displayHeight=naturalHeight*displayWidth/naturalWidth;
- const mime=/^data:image\/([^;,]+)/i.exec(src)?.[1]?.toLowerCase(),type=mime==='jpeg'||mime==='jpg'?'jpg':mime==='gif'?'gif':mime==='png'?'png':'png';
- let data:Uint8Array;
- if(!svg&&['png','jpeg','jpg','gif'].includes(mime||''))data=bytesFromURL(src);
- else{
-  const canvas=document.createElement('canvas'),scale=svg?2:1;
-  canvas.width=Math.max(1,Math.ceil(displayWidth*scale));canvas.height=Math.max(1,Math.ceil(displayHeight*scale));
-  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Canvas unavailable');ctx.drawImage(image,0,0,canvas.width,canvas.height);data=bytesFromURL(canvas.toDataURL('image/png'));
+
+ async function imageRun(element:Element,width:number):Promise<ImageRun>{
+  const svg=element.localName==='svg',view=svg?(element.getAttribute('viewBox')||'').trim().split(/[ ,]+/).map(Number):[],source=element.getAttribute('src')||'';
+  // Percent encoding avoids both btoa's Latin-1 restriction and argument limits on large diagrams.
+  let src=svg?'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(element)):source;
+  if(!src.startsWith('data:'))throw Error('Unresolved image');
+  let naturalWidth=0,naturalHeight=0;
+  if(svg){
+   naturalWidth=parseFloat(element.getAttribute('width')||'')||view[2]||640;naturalHeight=parseFloat(element.getAttribute('height')||'')||view[3]||320;
+   // Mermaid often writes width="100%". Its viewBox defines the actual pixel dimensions.
+   if(element.getAttribute('width')?.endsWith('%'))naturalWidth=view[2]||640;
+   const copy=element.cloneNode(true) as Element;copy.setAttribute('width',String(naturalWidth));copy.setAttribute('height',String(naturalHeight));copy.setAttribute('xmlns','http://www.w3.org/2000/svg');
+   src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(copy));
+  }
+  const image=await decoded(src);naturalWidth ||= image.naturalWidth;naturalHeight ||= image.naturalHeight;
+  const maxContainerPx=width/15;
+  const rawExplicit=svg?naturalWidth:Number(element.getAttribute('width')||element.getAttribute('data-w'))||naturalWidth;
+  const hasWrap=(element as HTMLElement).dataset?.wrap||element.classList.contains('md-wrap-left')||element.classList.contains('md-wrap-right')||element.classList.contains('md-wrap-free');
+  const displayWidth=hasWrap&&!element.getAttribute('width')&&!element.getAttribute('data-w')
+   ?Math.min(rawExplicit,maxContainerPx*0.52)
+   :Math.min(rawExplicit,maxContainerPx);
+  const displayHeight=naturalHeight*displayWidth/naturalWidth;
+  const mime=/^data:image\/([^;,]+)/i.exec(src)?.[1]?.toLowerCase(),type=mime==='jpeg'||mime==='jpg'?'jpg':mime==='gif'?'gif':mime==='png'?'png':'png';
+  let data:Uint8Array;
+  if(!svg&&['png','jpeg','jpg','gif'].includes(mime||''))data=bytesFromURL(src);
+  else{
+   const canvas=document.createElement('canvas'),scale=svg?2:1;
+   canvas.width=Math.max(1,Math.ceil(displayWidth*scale));canvas.height=Math.max(1,Math.ceil(displayHeight*scale));
+   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Canvas unavailable');ctx.drawImage(image,0,0,canvas.width,canvas.height);data=bytesFromURL(canvas.toDataURL('image/png'));
+  }
+  const floating=svg?undefined:wrapOptionsFromElement(element,displayWidth,maxContainerPx);
+  return new ImageRun({type,data,transformation:{width:displayWidth,height:displayHeight},...(floating?{floating}:{}),altText:{title:element.getAttribute('alt')||'',description:element.getAttribute('alt')||'',name:svg?'Mermaid':'Image'}});
  }
- return new ImageRun({type,data,transformation:{width:displayWidth,height:displayHeight},altText:{title:element.getAttribute('alt')||'',description:element.getAttribute('alt')||'',name:svg?'Mermaid':'Image'}});
-}
 
 /** Convert a resolved renderDelivery DOM. The caller awaits waitImages before handing it over. */
 export async function exportDOCX(root:HTMLElement,title:string,language='zh-CN'):Promise<Uint8Array>{
  const lists:NonNullable<INumberingOptions['config']>[number][]=[],footnotes:Record<string,{children:Paragraph[]}>={},definitions=new Map<string,Element>();let listID=0,noteID=0,lastYield=performance.now();
- const bookmarks=new Map<string,string>();for(const heading of root.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]'))bookmarks.set(heading.id,'liubai_heading_'+(bookmarks.size+1));
+ const bookmarks=new Map<string,string>();for(const heading of root.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]'))bookmarks.set(heading.id,'readsoul_heading_'+(bookmarks.size+1));
  for(const definition of root.querySelectorAll('.footnotes li[id]'))definitions.set(definition.id,definition);
  const yieldUI=async()=>{if(performance.now()-lastYield>=8){await new Promise(resolve=>setTimeout(resolve,0));lastYield=performance.now()}};
  const inline=async(nodes:Iterable<Node>,context:Context,style:IRunOptions={}):Promise<ParagraphChild[]>=>{
@@ -138,7 +174,7 @@ export async function exportDOCX(root:HTMLElement,title:string,language='zh-CN')
    if(el.classList.contains('footnotes')||el.classList.contains('footnote-backref'))continue;
    if(!/^(p|h[1-6]|ul|ol|blockquote|pre|hr|details|summary|table|div|section|figure|dl|dt|dd)$/.test(tag)){pending.push(node);continue}
    await flush();
-   if(tag==='p'||/^h[1-6]$/.test(tag)){const alertTitle=el.classList.contains('markdown-alert-title');out.push(await paragraph(el.childNodes,{...context,bold:context.bold||alertTitle,titleColor:alertTitle?context.alertColor:undefined,bookmark:bookmarks.get(el.id)},{...(/^h[1-6]$/.test(tag)?{heading:HeadingLevel[('HEADING_'+tag[1]) as keyof typeof HeadingLevel]}:{}),...(['center','right','left'].includes(el.getAttribute('align')||'')?{alignment:el.getAttribute('align') as 'center'|'right'|'left'}:{})}));}
+   if(tag==='p'||/^h[1-6]$/.test(tag)){const alertTitle=el.classList.contains('markdown-alert-title');const pAlign=el.getAttribute('align')||(el.classList.contains('md-wrap-right')?'right':el.classList.contains('md-wrap-left')?'left':'');out.push(await paragraph(el.childNodes,{...context,bold:context.bold||alertTitle,titleColor:alertTitle?context.alertColor:undefined,bookmark:bookmarks.get(el.id)},{...(/^h[1-6]$/.test(tag)?{heading:HeadingLevel[('HEADING_'+tag[1]) as keyof typeof HeadingLevel]}:{}),...(['center','right','left'].includes(pAlign)?{alignment:pAlign as 'center'|'right'|'left'}:{})}));}
    else if(tag==='ul'||tag==='ol'){
     const level=Math.min(context.level,8),reference='list-'+ ++listID,ordered=tag==='ol',start=Math.max(1,Math.min(2147483647,Number(el.getAttribute('start'))||1));
     lists.push({reference,levels:Array.from({length:9},(_,i)=>({level:i,format:ordered?LevelFormat.DECIMAL:LevelFormat.BULLET,text:ordered?'%'+(i+1)+'.':['•','◦','▪'][i%3],start:i===level?start:1,style:{paragraph:{indent:{left:720*(i+1),hanging:360}}}}))});
@@ -179,7 +215,7 @@ export async function exportDOCX(root:HTMLElement,title:string,language='zh-CN')
  const children=await blockChildren(root,{level:0,width:textWidth});
  const headingStyles=Object.fromEntries(Array.from({length:6},(_,i)=>['heading'+(i+1),{run:{font:{...bodyFont,eastAsia:'黑体'},bold:true,size:[32,28,26,24,22,22][i]},paragraph:{spacing:{before:240,after:120},keepNext:true}}])); // i18n-ignore: fixed OOXML font name
 
- const doc=new Document({title,creator:'Liubai',styles:{default:{document:{run:{font:bodyFont,size:22,language:{value:language,eastAsia:'zh-CN'}},paragraph:{spacing:{line:360,after:160}}},...headingStyles}},numbering:{config:lists},footnotes,sections:[{properties:{page:{size:{width:pageWidth,height:pageHeight},margin:{top:margin,bottom:margin,left:margin,right:margin}}},children:children.length?children:[new Paragraph('')]}]});
+ const doc=new Document({title,creator:'Readsoul',styles:{default:{document:{run:{font:bodyFont,size:22,language:{value:language,eastAsia:'zh-CN'}},paragraph:{spacing:{line:360,after:160}}},...headingStyles}},numbering:{config:lists},footnotes,sections:[{properties:{page:{size:{width:pageWidth,height:pageHeight},margin:{top:margin,bottom:margin,left:margin,right:margin}}},children:children.length?children:[new Paragraph('')]}]});
  doc.CoreProperties.addChildElement(new StringContainer('dc:language',language));
  await new Promise(resolve=>setTimeout(resolve,0));
  return new Uint8Array(await Packer.toArrayBuffer(doc));

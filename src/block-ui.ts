@@ -10,8 +10,8 @@ export interface BlockUIOptions {action:(id:string)=>void;dispatch:(spec:Transac
 export const blockRichMode=Facet.define<boolean,boolean>({combine:values=>values.some(Boolean)});
 const controls=new WeakMap<EditorView,BlockControls>();
 export const blockControls=(view:EditorView)=>controls.get(view);
-export function createBlockUI(composing:StateField<boolean>,focus:StateField<boolean>,options:BlockUIOptions){
- return ViewPlugin.define(view=>new BlockControls(view,()=>view.state.facet(blockRichMode)&&!view.state.field(composing)&&!view.composing&&!view.state.field(focus)&&!view.state.readOnly&&!view.dom.closest('.source-mode')&&!view.dom.closest('.read-layout'),options),{decorations:p=>p.decorations});
+export function createBlockUI(composing:StateField<boolean>,options:BlockUIOptions){
+ return ViewPlugin.define(view=>new BlockControls(view,()=>view.state.facet(blockRichMode)&&!view.state.field(composing)&&!view.composing&&!view.state.readOnly&&!view.dom.closest('.read-layout'),options),{decorations:p=>p.decorations});
 }
 class BlockControls {
  decorations:DecorationSet=Decoration.none;
@@ -29,6 +29,7 @@ class BlockControls {
  private convertMenu:ReturnType<typeof attachMenu>;
  private pointer:{id:number;x:number;y:number;block:Block;range:Range;shift:boolean;dragging:boolean;selected:Range|null}|null=null;
  private landing:{block:Block;place:'before'|'after'}|null=null;
+ private ghost:HTMLDivElement|null=null;
  private frame=0;
  private paint=0;
  private mouse={x:0,y:0};
@@ -121,8 +122,81 @@ class BlockControls {
  private move(e:PointerEvent){
   const p=this.pointer;if(!p||p.id!==e.pointerId)return;
   if(!this.enabled()){this.cancel();return}this.mouse={x:e.clientX,y:e.clientY};
-  if(!p.dragging&&Math.hypot(e.clientX-p.x,e.clientY-p.y)>4){p.dragging=true;this.range=p.range;this.decorate();this.redraw();this.frame=requestAnimationFrame(()=>this.autoScroll())}
-  if(p.dragging){e.preventDefault();this.queuePaint()}
+  if(!p.dragging&&Math.hypot(e.clientX-p.x,e.clientY-p.y)>4){
+   p.dragging=true;this.range=p.range;this.decorate();this.redraw();
+   this.createGhost(p.range);
+   this.frame=requestAnimationFrame(()=>this.autoScroll());
+  }
+  if(p.dragging){
+   e.preventDefault();
+   this.placeGhost(e.clientX,e.clientY);
+   this.queuePaint();
+  }
+ }
+ private createGhost(range:Range){
+  this.ghost?.remove();
+  const ghost=document.createElement('div');
+  ghost.className='rs-block-drag-ghost';
+  const raw=this.view.state.sliceDoc(range.from,range.to)
+   .replace(/^[ \t]*(?:#{1,6}\s+|>\s*|[-+*]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/gm,'')
+   .replace(/(\*\*|__|~~|==|`)/g,'')
+   .replace(/\s+/g,' ')
+   .trim();
+  const lines=this.view.state.doc.lineAt(range.to).number-this.view.state.doc.lineAt(range.from).number+1;
+  const label=raw.length>56?raw.slice(0,56)+'…':(raw||'空段落');
+  const title=document.createElement('span');
+  title.className='rs-block-drag-ghost-text';
+  title.textContent=label;
+  ghost.append(title);
+  if(lines>1){
+   const count=document.createElement('span');
+   count.className='rs-block-drag-ghost-meta';
+   count.textContent=`${lines} 行`;
+   ghost.append(count);
+  }
+  document.body.append(ghost);
+  this.ghost=ghost;
+  this.placeGhost(this.mouse.x,this.mouse.y);
+ }
+ private placeGhost(x:number,y:number){
+  if(!this.ghost)return;
+  this.ghost.style.transform=`translate3d(${(x+14).toFixed(1)}px, ${(y-14).toFixed(1)}px, 0)`;
+ }
+ private snapshotVisibleLines(){
+  const snap=new Map<string,{left:number;top:number}>(),seen=new Map<string,number>();
+  const r=this.scroll.getBoundingClientRect();
+  for(const el of this.view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')){
+   const txt=el.textContent?.trim()||'';if(!txt)continue;
+   const box=el.getBoundingClientRect();
+   if(box.bottom<r.top-120||box.top>r.bottom+120)continue;
+   const prefix=txt.slice(0,14),idx=seen.get(prefix)||0;seen.set(prefix,idx+1);
+   snap.set(`${prefix}#${idx}`,{left:box.left,top:box.top});
+  }
+  return snap;
+ }
+ private flipLines(before:Map<string,{left:number;top:number}>){
+  if(!before.size)return;
+  const seen=new Map<string,number>(),moving:HTMLElement[]=[];
+  for(const el of this.view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')){
+   const txt=el.textContent?.trim()||'';if(!txt)continue;
+   const prefix=txt.slice(0,14),idx=seen.get(prefix)||0;seen.set(prefix,idx+1);
+   const prev=before.get(`${prefix}#${idx}`);if(!prev)continue;
+   el.style.transition='none';el.style.transform='';
+   const now=el.getBoundingClientRect(),dx=prev.left-now.left,dy=prev.top-now.top;
+   if((Math.abs(dx)>1.5||Math.abs(dy)>1.5)&&Math.abs(dy)<420){
+    el.style.transform=`translate3d(${dx}px, ${dy}px, 0)`;moving.push(el);
+   }
+  }
+  if(!moving.length)return;
+  void this.view.contentDOM.offsetHeight;
+  requestAnimationFrame(()=>{
+   for(const el of moving){
+    if(!el.isConnected)continue;
+    el.style.transition='transform 210ms cubic-bezier(.22, 1, .36, 1)';
+    el.style.transform='translate3d(0, 0, 0)';
+    setTimeout(()=>{if(el.isConnected){el.style.transition='';el.style.transform=''}},230);
+   }
+  });
  }
  private queuePaint(){if(!this.paint)this.paint=requestAnimationFrame(()=>{this.paint=0;if(this.pointer?.dragging)this.target()})}
  private target(){
@@ -144,10 +218,11 @@ class BlockControls {
  private up(e:PointerEvent){
   const p=this.pointer;if(!p||p.id!==e.pointerId)return;
   const landing=this.landing,dragging=p.dragging;this.cancel();
-  if(dragging){this.redraw();if(landing&&this.enabled()){const spec=moveBlocksTo(this.view.state,p.range,landing.block,landing.place);if(spec){this.range=p.range;this.options.dispatch(spec)}}}
+  if(dragging){this.redraw();if(landing&&this.enabled()){const spec=moveBlocksTo(this.view.state,p.range,landing.block,landing.place);if(spec){const before=this.snapshotVisibleLines();this.range=p.range;this.options.dispatch(spec);this.flipLines(before)}}}
   else{this.select(p.block,p.shift);this.show(p.block)}
  }
  private cancel(){
+  this.ghost?.remove();this.ghost=null;
   if(this.pointer?.dragging){this.range=this.pointer.selected;this.suppressClick=true;setTimeout(()=>this.suppressClick=false,0)}
   if(this.pointer&&this.grip.hasPointerCapture(this.pointer.id))this.grip.releasePointerCapture(this.pointer.id);
   this.pointer=null;this.landing=null;cancelAnimationFrame(this.frame);cancelAnimationFrame(this.paint);this.paint=0;this.line.hidden=true;this.decorate();

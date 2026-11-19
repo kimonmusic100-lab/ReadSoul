@@ -9,7 +9,7 @@ import {blockAt,insertParagraphBelow} from './blocks';
 import {focusTableCell} from './table-ui';
 import {messages} from './i18n';
 import {insertFootnote} from './extras';
-import {messagesIn,type Messages} from '../locales';
+import type {Messages} from '../locales';
 
 export type SlashItemID='paragraph'|'h1'|'h2'|'h3'|'bullet'|'ordered'|'task'|'quote'|'code'|'math'|'mermaid'|'table'|'image'|'rule'|'note'|'details'|'footnote';
 interface SlashItem {id:SlashItemID;label:keyof Messages;keywords:string}
@@ -32,17 +32,16 @@ const items:SlashItem[]=[
  {id:'rule',label:'fHorizontalRule',keywords:'fengexian fgx horizontal rule divider separator'},
  {id:'note',label:'fCallout',keywords:'tishikuai tsk callout note alert'},
 ];
-const zh=messagesIn('zh-Hans'),en=messagesIn('en');
 const label=(catalog:Messages,item:SlashItem)=>(catalog[item.label] as ()=>string)();
 export function filterSlashItems(query:string):SlashItem[]{
  const q=query.trim().toLowerCase();if(!q)return items.slice();
  const score=(item:SlashItem)=>{
-  const words=[label(zh,item),label(en,item),...item.keywords.split(' ')].map(word=>word.toLowerCase());
+  const words=[label(messages,item),...item.keywords.split(' ')].map(word=>word.toLowerCase());
   return words.some(word=>word===q)?0:words.some(word=>word.startsWith(q))?1:words.some(word=>word.includes(q))?2:3;
  };
  return items.map(item=>({item,score:score(item)})).filter(match=>match.score<3).sort((a,b)=>a.score-b.score).map(match=>match.item);
 }
-export const slashOpen=StateEffect.define<null>(),slashClose=StateEffect.define<null>(),slashSelect=StateEffect.define<number>();
+const slashOpen=StateEffect.define<null>(),slashClose=StateEffect.define<null>(),slashSelect=StateEffect.define<number>();
 interface SlashState {from:number;start:number;query:string;items:SlashItem[];index:number}
 // Slash inserts block markup, so literal scopes stay plain text, matching the
 // exclusions in extras.ts and wiki-links.ts for code, math, diagrams and HTML.
@@ -57,8 +56,8 @@ const inLiteralBlock=(state:EditorState,pos:number)=>{
  }
  return false;
 };
-export function createSlashState(composing:StateField<boolean>,focus:StateField<boolean>){
- const enabled=(state:EditorState)=>state.facet(blockRichMode)&&!state.readOnly&&!state.field(composing)&&!state.field(focus);
+function createSlashState(composing:StateField<boolean>){
+ const enabled=(state:EditorState)=>state.facet(blockRichMode)&&!state.readOnly&&!state.field(composing);
  function read(state:EditorState,from:number,start:number,index=0):SlashState|null{
   const sel=state.selection.main;if(!sel.empty||sel.head<start||start<from)return null;
   if(inLiteralBlock(state,sel.head))return null;
@@ -95,7 +94,7 @@ export function createSlashState(composing:StateField<boolean>,focus:StateField<
   }
  });
 }
-export function applySlashItem(state:EditorState,id:SlashItemID):TransactionSpec{
+function applySlashItem(state:EditorState,id:SlashItemID):TransactionSpec{
  const line=state.doc.lineAt(state.selection.main.head),empty=EditorState.create();let insert='',cursor=0;
  if(id==='paragraph'||/^h[123]$/.test(id))insert=empty.update(setHeading(empty,id==='paragraph'?0:Number(id[1]))).state.doc.toString();
  else if(['bullet','ordered','task','quote'].includes(id))insert=empty.update(blockFormat(empty,id as 'bullet'|'ordered'|'task'|'quote',true)).state.doc.toString();
@@ -128,8 +127,8 @@ export function insertToolbarItem(state:EditorState,id:SlashItemID,below?:{from:
 
 const controls=new WeakMap<EditorView,SlashMenu>();
 export function openSlashMenu(view:EditorView){view.dispatch({effects:slashOpen.of(null)});view.focus()}
-export function createSlashMenu(composing:StateField<boolean>,focus:StateField<boolean>,image:()=>void){
- const field=createSlashState(composing,focus);
+export function createSlashMenu(composing:StateField<boolean>,image:()=>void){
+ const field=createSlashState(composing);
  const plugin=ViewPlugin.define(view=>new SlashMenu(view,field,composing,image));
  const command=(key:string)=>(view:EditorView)=>controls.get(view)?.key(key)||false;
  return [field,plugin,Prec.highest(keymap.of(['ArrowUp','ArrowDown','Enter','Tab','Escape'].map(key=>({key,run:command(key)}))))];

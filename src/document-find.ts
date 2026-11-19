@@ -34,7 +34,7 @@ export function createDocumentFind(options:{getView:()=>EditorView;reading:()=>b
  const replace=button('find-replace-next','',()=>replaceMatch(false)),all=button('find-replace-all','',()=>replaceMatch(true));
  replaceRow.append(replacementField,replace,all);bar.append(row,replaceRow,footer);
  document.body.append(bar);
- const entry=document.querySelector<HTMLElement>('#document-find-button')!;
+ const entry=document.querySelector<HTMLElement>('#document-find-button');
  const desk=document.querySelector<HTMLElement>('.desk')!;
  const position=()=>{if(bar.hidden)return;
   // Sit just below the topbar, but never let the panel extend past the bottom
@@ -70,7 +70,7 @@ export function createDocumentFind(options:{getView:()=>EditorView;reading:()=>b
   replaceLabel.textContent=messages.fReplace();replaceToggle.hidden=read;replaceToggle.setAttribute('aria-expanded',String(expanded&&!read));replaceToggle.setAttribute('aria-controls','find-replace-row');
   replaceRow.hidden=read||!expanded;replacement.placeholder=messages.fReplace();replacement.setAttribute('aria-label',messages.fReplace());
   replace.textContent=messages.fReplace();all.textContent=messages.fReplaceAll();replace.disabled=all.disabled=read||options.blocked()||!valid||!r.matches.length;
-  entry.setAttribute('aria-expanded',String(!bar.hidden));
+  entry?.setAttribute('aria-expanded',String(!bar.hidden));
   position();
  }
  function sync(select=false){

@@ -43,11 +43,11 @@ export function footnoteInteractions(composing:StateField<boolean>){
   const text=definition.text.length>500?definition.text.slice(0,499)+'…':definition.text;
   return {pos:reference.from,end:reference.to,above:true,create(){const dom=document.createElement('div');dom.className='md-footnote-tooltip';dom.textContent=text;return {dom}}};
  }),EditorView.domEventHandlers({mousedown:(event,view)=>{
-  if(!(event.metaKey||event.ctrlKey)||view.composing||view.state.field(composing)||!(event.target as HTMLElement).closest('[data-footnote]'))return false;
+  if(!event.ctrlKey||event.metaKey||view.composing||view.state.field(composing)||!(event.target as HTMLElement).closest('[data-footnote]'))return false;
   // Preserve the replacement until click, so moving the caret cannot remove its target first.
   event.preventDefault();return true;
  },click:(event,view)=>{
-  if(!(event.metaKey||event.ctrlKey)||view.composing||view.state.field(composing))return false;
+  if(!event.ctrlKey||event.metaKey||view.composing||view.state.field(composing))return false;
   const target=(event.target as HTMLElement).closest<HTMLElement>('[data-footnote]');if(!target)return false;
   const definition=extraRanges(view.state).definitions.get(target.dataset.footnote!);if(!definition)return false;
   event.preventDefault();view.dispatch({selection:{anchor:definition.inline?definition.from:definition.textFrom},scrollIntoView:true});view.focus();return true;

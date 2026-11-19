@@ -1,0 +1,1132 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title data-i18n="fReadsoul">ReadSoul</title>
+    <link rel="icon" href="/logo.png" sizes="any" />
+    <script>
+      if (!window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.documentElement.classList.add('rs-chrome-reveal', 'rs-chrome-hidden');
+      }
+    </script>
+  </head>
+  <body>
+<div class="rs-shell">
+        <nav class="rs-rail" aria-label="Main Navigation">
+          <div class="rs-rail-top">
+            <input id="rs-avatar-input" type="file" accept="image/*" hidden />
+            <button
+              type="button"
+              id="rs-avatar-button"
+              class="rs-avatar-btn"
+              data-tip="点击更换头像"
+              aria-label="用户头像"
+            >
+              <img id="rs-avatar-img" class="rs-avatar-img" alt="头像" hidden />
+              <span id="rs-avatar-fallback" data-icon="user"></span>
+            </button>
+          </div>
+
+          <div class="rs-rail-mid">
+            <button
+              id="home-button"
+              type="button"
+              class="rs-rail-btn"
+              data-tip="首页"
+              aria-label="首页"
+            >
+              <span class="rs-rail-indicator" aria-hidden="true"></span>
+              <span data-icon="home"></span>
+            </button>
+
+            <button
+              id="library-button"
+              type="button"
+              class="rs-rail-btn"
+              data-tip="库"
+              aria-label="库"
+              aria-controls="drawer"
+              aria-expanded="false"
+            >
+              <span class="rs-rail-indicator" aria-hidden="true"></span>
+              <span data-icon="library"></span>
+            </button>
+
+            <button
+              id="sidebar-button"
+              class="rs-rail-btn"
+              data-tip="历史"
+              aria-label="历史"
+              aria-controls="drawer"
+              aria-expanded="false"
+            >
+              <span class="rs-rail-indicator" aria-hidden="true"></span>
+              <span data-icon="history"></span>
+            </button>
+          </div>
+
+          <div class="rs-rail-bottom">
+            <button
+              id="rail-settings-button"
+              class="rs-rail-btn"
+              data-action="settings"
+              data-tip="Settings"
+              aria-label="Settings"
+              data-shortcut="Mod+,"
+              data-i18n-tip="fSettingsTitle"
+              data-i18n-aria-label="fSettingsTitle"
+            >
+              <span class="rs-rail-indicator" aria-hidden="true"></span>
+              <span data-icon="settings"></span>
+            </button>
+          </div>
+        </nav>
+
+        <div class="rs-main-column">
+          <header class="topbar rs-topbar" data-tauri-drag-region>
+            <div class="rs-topbar-left" data-tauri-drag-region>
+              <div
+                id="doc-tabs"
+                class="rs-doc-tabs"
+                role="tablist"
+                aria-label="Open Documents"></div>
+              <button
+                id="tab-new-button"
+                class="rs-tab-add"
+                data-action="new"
+                data-tip="New Document"
+                aria-label="New Document"
+                data-icon="plus"
+                data-i18n-tip="fNewDocument"
+                data-i18n-aria-label="fNewDocument"
+                data-shortcut="Mod+N"></button>
+            </div>
+
+            <div class="top-actions rs-top-actions">
+              <button
+                id="view-cycle-button"
+                type="button"
+                class="tool rs-view-cycle-btn"
+                data-view-mode="single"
+                data-icon="view-edit"
+                data-tip="编辑（点击切换分栏）"
+                aria-label="编辑（点击切换分栏）"></button>
+              <button
+                class="export-button"
+                data-action="deliver"
+                data-tip="Export PDF, HTML, ZIP, or copy rich text"
+                aria-label="Export"
+                data-i18n-tip="fExportPDFHTMLZIPOrCopyRichText"
+                data-i18n-aria-label="fExport2"
+              >
+                <span data-icon="export"></span>
+                <span class="export-label" data-i18n="fExport2">
+                  Export
+                </span>
+              </button>
+              <div class="rs-window-controls" data-tauri-drag-region="false">
+                <button
+                  id="win-minimize"
+                  type="button"
+                  class="rs-win-btn"
+                  data-tauri-drag-region="false"
+                  aria-label="最小化"
+                  data-tip="最小化"
+                  data-icon="minus"></button>
+                <button
+                  id="win-maximize"
+                  type="button"
+                  class="rs-win-btn"
+                  data-tauri-drag-region="false"
+                  aria-label="最大化"
+                  data-tip="最大化"
+                  data-icon="square"></button>
+                <button
+                  id="win-close"
+                  type="button"
+                  class="rs-win-btn rs-win-close"
+                  data-tauri-drag-region="false"
+                  aria-label="关闭"
+                  data-tip="关闭"
+                  data-icon="close"></button>
+              </div>
+            </div>
+          </header>
+
+          <div class="workspace rs-band">
+            <aside id="drawer" class="drawer rs-sidebar" hidden>
+              <div class="rs-sidebar-inner">
+                <div id="drawer-history-view" class="rs-drawer-view">
+                  <div class="drawer-head rs-sidebar-head">
+                    <div class="rs-sidebar-search">
+                      <span class="rs-sidebar-search-icon" data-icon="find"></span>
+                      <input
+                        id="recent-search"
+                        type="search"
+                        placeholder="Search document titles and content…"
+                        aria-label="Search document titles and content…"
+                        data-i18n-placeholder="fSearchDocuments"
+                        data-i18n-aria-label="fSearchDocuments"
+                        aria-describedby="search-consistency"
+                      />
+                    </div>
+                    <button
+                      id="global-search-button"
+                      type="button"
+                      class="tool"
+                      data-tip="全局全文搜索 (Ctrl+K)"
+                      aria-label="全局全文搜索"
+                      data-shortcut="Mod+K"
+                      data-icon="find"></button>
+                    <button
+                      class="tool rs-sidebar-new"
+                      data-action="new"
+                      data-tip="New Document"
+                      aria-label="New Document"
+                      data-icon="new"
+                      data-i18n-tip="fNewDocument"
+                      data-i18n-aria-label="fNewDocument"
+                      data-shortcut="Mod+N"></button>
+                    <button
+                      class="tool rs-sidebar-close"
+                      data-close="drawer"
+                      aria-label="Close Sidebar"
+                      data-tip="Close Sidebar"
+                      data-icon="close"
+                      data-i18n-aria-label="fCloseSidebar"
+                      data-i18n-tip="fCloseSidebar"></button>
+                  </div>
+                  <div class="rs-sidebar-subhead">
+                    <p id="recent-label" class="drawer-label" data-i18n="fRecentDocuments">
+                      Recent Documents
+                    </p>
+                    <label class="tag-filter-row" for="tag-filter">
+                      <span data-i18n="fTagFilter" class="sr-only">Filter by tag</span>
+                      <select id="tag-filter" aria-label="Filter by tag" data-i18n-aria-label="fTagFilter">
+                        <option value="" data-i18n="fAllTags">
+                          All Tags
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                  <p id="search-status" class="search-status" role="status" aria-live="polite" hidden></p>
+                  <p id="search-consistency" class="search-status" hidden></p>
+                  <div id="drawer-list" aria-labelledby="recent-label"></div>
+                  <button class="drawer-open" data-action="open">
+                    <span data-i18n="fOpenLocalMarkdown">Open Local Markdown</span> <kbd data-keys="Mod+O">Ctrl+O</kbd>
+                  </button>
+                </div>
+
+                <div id="drawer-library-view" class="rs-drawer-view" hidden>
+                  <div class="rs-lib-header">
+                    <div class="rs-lib-title">
+                      <span class="rs-lib-title-icon" data-icon="library"></span>
+                      <h2>库</h2>
+                    </div>
+                    <div class="rs-lib-head-btns">
+                      <button
+                        id="library-gsearch-btn"
+                        type="button"
+                        class="tool"
+                        data-tip="全局全文搜索 (Ctrl+K)"
+                        aria-label="全局全文搜索"
+                        data-shortcut="Mod+K"
+                        data-icon="find"></button>
+                      <button
+                        class="tool rs-sidebar-close"
+                        data-close="drawer"
+                        aria-label="关闭库面板"
+                        data-tip="关闭库面板"
+                        data-icon="close"></button>
+                    </div>
+                  </div>
+
+                  <div class="rs-lib-tabs" role="tablist" aria-label="库来源切换">
+                    <button
+                      id="lib-tab-local"
+                      type="button"
+                      role="tab"
+                      class="rs-lib-tab"
+                      data-lib-tab="local"
+                      aria-selected="true"
+                      aria-controls="library-local-pane"
+                    >
+                      <span data-icon="hard-drive"></span>
+                      <span>本地</span>
+                    </button>
+                    <button
+                      id="lib-tab-cloud"
+                      type="button"
+                      role="tab"
+                      class="rs-lib-tab"
+                      data-lib-tab="cloud"
+                      aria-selected="false"
+                      aria-disabled="true"
+                      disabled
+                      data-tip="云端知识库功能占位，即将开放"
+                    >
+                      <span data-icon="cloud"></span>
+                      <span>云端</span>
+                      <span class="rs-lib-tab-tag">即将</span>
+                    </button>
+                  </div>
+
+                  <div id="library-local-pane" class="rs-lib-pane" role="tabpanel" aria-labelledby="lib-tab-local">
+                    <div class="rs-lib-toolbar">
+                      <div class="rs-sidebar-search rs-lib-filter">
+                        <span class="rs-sidebar-search-icon" data-icon="find"></span>
+                        <input
+                          id="library-filter-input"
+                          type="search"
+                          placeholder="过滤本地文件夹或文档…"
+                          aria-label="过滤本地文件夹或文档"
+                        />
+                      </div>
+                    </div>
+                    <div class="rs-lib-actions">
+                      <button
+                        id="add-folder-btn"
+                        type="button"
+                        class="rs-folder-add-btn"
+                        data-tip="添加本地文件夹到库"
+                        aria-label="添加文件夹"
+                      >
+                        <span data-icon="folder-plus"></span>
+                        <span>添加文件夹</span>
+                      </button>
+                      <div class="rs-lib-action-tools">
+                        <button
+                          id="lib-refresh-btn"
+                          type="button"
+                          class="tool rs-lib-tool-btn"
+                          data-tip="刷新文件夹目录树"
+                          aria-label="刷新文件夹目录树"
+                          data-icon="refresh"></button>
+                        <button
+                          id="lib-expand-btn"
+                          type="button"
+                          class="tool rs-lib-tool-btn"
+                          data-tip="全部展开 / 折叠"
+                          aria-label="全部展开 / 折叠"
+                          data-icon="chevrons-down"></button>
+                      </div>
+                    </div>
+                    <div id="library-stats" class="rs-lib-stats"></div>
+                    <div id="folder-tree" class="rs-folder-tree" aria-label="本地文件夹库目录树"></div>
+                  </div>
+                </div>
+              </div>
+              <div id="drawer-resizer" class="rs-sidebar-resizer" aria-hidden="true"></div>
+            </aside>
+
+            <div class="workarea rs-card">
+              <section id="rs-home-overlay" class="rs-home-overlay" aria-label="ReadSoul 首页">
+                <div class="rs-paper-grain" aria-hidden="true"></div>
+
+                <div class="rs-splash-layer" id="rs-splash-layer">
+                  <div class="rs-ambient-glow" aria-hidden="true"></div>
+
+                  <div class="rs-logo-combo">
+                    <svg class="rs-svg-stage" viewBox="0 0 220 170" fill="none" aria-hidden="true">
+                      <g class="rs-books-group">
+                        <ellipse cx="110" cy="144" rx="58" ry="6" fill="var(--foreground)" opacity="0.07" />
+
+                        <path
+                          d="M52 126 L166 126 C169 126 171 128 171 131 L171 137 C171 140 169 142 166 142 L52 142 C48 142 46 139 46 134 C46 129 48 126 52 126 Z"
+                          fill="var(--rs-book-cover-2)"
+                          stroke="var(--foreground)"
+                          stroke-width="1.35"
+                        />
+                        <path
+                          d="M54 129 L167 129 L167 139 L54 139 C50.5 139 49 137 49 134 C49 131 50.5 129 54 129 Z"
+                          fill="var(--rs-page-edge)"
+                        />
+                        <line x1="60" y1="134" x2="158" y2="134" stroke="var(--border)" stroke-width="0.9" />
+
+                        <path
+                          d="M58 109 L160 109 C163 109 165 111 165 114 L165 120 C165 123 163 125 160 125 L58 125 C54 125 52 122 52 117 C52 112 54 109 58 109 Z"
+                          fill="var(--rs-book-cover-1)"
+                          stroke="var(--foreground)"
+                          stroke-width="1.35"
+                        />
+                        <path
+                          d="M60 112 L161 112 L161 122 L60 122 C56.5 122 55 120 55 117 C55 114 56.5 112 60 112 Z"
+                          fill="var(--rs-page-edge)"
+                        />
+                        <path d="M138 122 L138 136 L142 133 L146 136 L146 122 Z" fill="var(--primary)" />
+
+                        <path
+                          d="M64 95 L154 95 C157 95 159 97 159 100 L159 105 C159 107 157 109 154 109 L64 109 C60 109 58 106 58 102 C58 98 60 95 64 95 Z"
+                          fill="var(--rs-book-cover-3)"
+                          stroke="var(--foreground)"
+                          stroke-width="1.35"
+                        />
+                        <path
+                          d="M66 98 L155 98 L155 106 L66 106 C63 106 61.5 104.5 61.5 102 C61.5 99.5 63 98 66 98 Z"
+                          fill="var(--rs-page-edge)"
+                        />
+
+                        <g class="rs-top-page-curl">
+                          <path
+                            d="M66 95 Q110 88 156 93 L154 96 Q110 92 66 96 Z"
+                            fill="var(--card)"
+                            stroke="var(--foreground)"
+                            stroke-width="1.15"
+                            stroke-linejoin="round"
+                          />
+                        </g>
+                      </g>
+
+                      <text class="rs-char-particle rs-char-p1" x="128" y="82">「</text>
+                      <text class="rs-char-particle rs-char-p2" x="114" y="70">·</text>
+                      <text class="rs-char-particle rs-char-p3" x="144" y="64">¶</text>
+                      <text class="rs-char-particle rs-char-p4" x="134" y="54">」</text>
+
+                      <g class="rs-butterfly-carrier">
+                        <g class="rs-butterfly-topdown">
+                          <g class="rs-butterfly-wing-left">
+                            <path
+                              d="M0 0 C-7 -12 -22 -14 -21 -3 C-20 5 -9 7 0 2 Z"
+                              fill="var(--rs-wing-gold)"
+                              fill-opacity="0.28"
+                              stroke="var(--rs-wing-ink)"
+                              stroke-width="1.25"
+                              stroke-linejoin="round"
+                            />
+                            <path
+                              d="M0 2 C-8 4 -15 12 -10 17 C-6 21 -1 14 0 5 Z"
+                              fill="var(--rs-wing-gold)"
+                              fill-opacity="0.2"
+                              stroke="var(--rs-wing-ink)"
+                              stroke-width="1.15"
+                              stroke-linejoin="round"
+                            />
+                            <path d="M-2 0 Q-11 -5 -16 -3" stroke="var(--rs-wing-vein)" stroke-width="0.75" opacity="0.7" />
+                            <circle cx="-13" cy="-4" r="1.4" fill="var(--primary)" opacity="0.75" />
+                          </g>
+
+                          <g class="rs-butterfly-wing-right">
+                            <path
+                              d="M0 0 C7 -12 22 -14 21 -3 C20 5 9 7 0 2 Z"
+                              fill="var(--rs-wing-gold)"
+                              fill-opacity="0.32"
+                              stroke="var(--rs-wing-ink)"
+                              stroke-width="1.25"
+                              stroke-linejoin="round"
+                            />
+                            <path
+                              d="M0 2 C8 4 15 12 10 17 C6 21 1 14 0 5 Z"
+                              fill="var(--rs-wing-gold)"
+                              fill-opacity="0.22"
+                              stroke="var(--rs-wing-ink)"
+                              stroke-width="1.15"
+                              stroke-linejoin="round"
+                            />
+                            <path d="M2 0 Q11 -5 16 -3" stroke="var(--rs-wing-vein)" stroke-width="0.75" opacity="0.7" />
+                            <circle cx="13" cy="-4" r="1.4" fill="var(--primary)" opacity="0.75" />
+                          </g>
+
+                          <ellipse cx="0" cy="3" rx="1.2" ry="6.5" fill="var(--rs-wing-ink)" />
+                          <path d="M-0.4 -3 Q-3 -9 -6 -10" stroke="var(--rs-wing-ink)" stroke-width="0.9" stroke-linecap="round" />
+                          <path d="M0.4 -3 Q3 -9 6 -10" stroke="var(--rs-wing-ink)" stroke-width="0.9" stroke-linecap="round" />
+                        </g>
+
+                        <g class="rs-butterfly-side">
+                          <path
+                            d="M2 2 C9 -6 19 -7 18 1 C17 6 9 7 3 3 Z"
+                            fill="var(--rs-wing-gold)"
+                            fill-opacity="0.22"
+                            stroke="var(--rs-wing-ink)"
+                            stroke-width="1.15"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M-1 1 C-1 -11 9 -21 18 -17 C23 -14 19 -2 5 2 Z"
+                            fill="var(--rs-wing-gold)"
+                            fill-opacity="0.34"
+                            stroke="var(--rs-wing-ink)"
+                            stroke-width="1.25"
+                            stroke-linejoin="round"
+                          />
+                          <path d="M2 0 Q9 -9 14 -12" stroke="var(--rs-wing-vein)" stroke-width="0.75" opacity="0.75" />
+                          <path d="M3 1 Q10 -3 14 -2" stroke="var(--rs-wing-vein)" stroke-width="0.65" opacity="0.6" />
+                          <circle cx="13" cy="-11" r="1.5" fill="var(--primary)" opacity="0.8" />
+                          <path
+                            d="M-2 3.5 L-4.5 7.5 L-3.2 10"
+                            stroke="var(--rs-wing-ink)"
+                            stroke-width="0.9"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M0.5 4 L-0.5 8 L1 10"
+                            stroke="var(--rs-wing-ink)"
+                            stroke-width="0.9"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path
+                            d="M3 4.5 L3.5 8 L5 9.8"
+                            stroke="var(--rs-wing-ink)"
+                            stroke-width="0.85"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <path d="M-4 1.5 Q1 3.5 8 5.2" stroke="var(--rs-wing-ink)" stroke-width="2.2" stroke-linecap="round" />
+                          <circle cx="-4.8" cy="1.2" r="1.4" fill="var(--rs-wing-ink)" />
+                          <path d="M-5.5 0.2 Q-8.5 -4.5 -11 -6" stroke="var(--rs-wing-ink)" stroke-width="0.85" stroke-linecap="round" />
+                          <path
+                            d="M-4.8 -0.2 Q-6.5 -5.5 -8.5 -7.5"
+                            stroke="var(--rs-wing-ink)"
+                            stroke-width="0.75"
+                            stroke-linecap="round"
+                            opacity="0.75"
+                          />
+                        </g>
+                      </g>
+                    </svg>
+
+                    <div class="rs-brand-lockup">
+                      <div class="rs-wordmark">
+                        Read<span class="s-accent">S</span>oul
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rs-sub-lines">
+                    <div class="rs-tagline">一页纸写下来，让文字回到它本来的呼吸感</div>
+                    <div class="rs-version-tag">v0.1.3 · LOCAL-FIRST MARKDOWN</div>
+                  </div>
+                </div>
+
+                <div class="rs-home-search-zone" id="rs-home-search-zone">
+                  <div class="rs-home-search-box">
+                    <span class="rs-home-search-icon" data-icon="find" aria-hidden="true"></span>
+                    <input
+                      id="rs-home-search-input"
+                      class="rs-home-search-input"
+                      type="text"
+                      autocomplete="off"
+                      aria-label="搜索或新建文稿"
+                    />
+                  </div>
+                  <div class="rs-home-results" id="rs-home-results"></div>
+                  <div class="rs-home-actions">
+                    <button type="button" id="rs-home-new" class="rs-home-chip">
+                      <span data-icon="plus" aria-hidden="true"></span>
+                      <span>新建文稿</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="rs-home-recent"
+                      class="rs-home-chip"
+                      aria-expanded="false"
+                      aria-controls="rs-home-recent-tray"
+                    >
+                      <span data-icon="clock" aria-hidden="true"></span>
+                      <span>最近打开</span>
+                    </button>
+                    <button type="button" id="rs-home-open" class="rs-home-chip">
+                      <span data-icon="files" aria-hidden="true"></span>
+                      <span>打开文稿</span>
+                    </button>
+                  </div>
+                  <div id="rs-home-recent-tray" class="rs-home-recent-tray" aria-label="最近打开的文稿">
+                    <div id="rs-home-recent-track" class="rs-home-recent-track"></div>
+                  </div>
+                </div>
+              </section>
+              <nav id="format-bar" role="toolbar" aria-label="Format" data-i18n-aria-label="fFormat">
+                <div class="format-group">
+                  <button
+                    type="button"
+                    id="heading-button"
+                    class="format-text"
+                    data-tip="Heading Level"
+                    aria-haspopup="menu"
+                    aria-controls="heading-menu"
+                    aria-expanded="false"
+                    data-i18n-tip="fHeadingLevel"
+                    data-shortcut="Mod+1–6"
+                  >
+                    <span id="heading-label" data-i18n="fBody">
+                      Body
+                    </span>
+                    <span data-icon="chevron-down"></span>
+                  </button>
+                  <span class="format-sep" aria-hidden="true"></span>
+                  <button
+                    type="button"
+                    id="format-image-button"
+                    class="format-text format-image-btn"
+                    data-action="image"
+                    data-tip="插入图片"
+                    aria-label="插入图片"
+                  >
+                    <span data-icon="image"></span>
+                    <span>图片</span>
+                  </button>
+                </div>
+              </nav>
+
+              <div id="banner" role="alert" hidden>
+                <span id="banner-text"></span>
+                <button type="button" id="retry-save" data-action="retry" data-i18n="fRetrySave">
+                  Retry Save
+                </button>
+                <button type="button" id="banner-save-as" data-action="saveAs" data-i18n="fSaveAs">
+                  Save As…
+                </button>
+                <button type="button" id="reload-disk" data-action="reload" hidden data-i18n="fViewDiskVersion">
+                  View Disk Version
+                </button>
+                <button
+                  type="button"
+                  id="overwrite-disk"
+                  data-action="overwrite"
+                  hidden
+                  data-i18n="fOverwriteWithCurrentVersion"
+                >
+                  Overwrite with Current Version
+                </button>
+              </div>
+
+              <main class="desk">
+                <section class="editor-pane" aria-label="Editor" data-i18n-aria-label="fEditor">
+                  <header class="editor-head">
+                    <span>编辑视图</span>
+                    <span class="editor-pill">编辑</span>
+                  </header>
+                  <div class="editor-scroll">
+                    <article class="paper">
+                      <div id="editor" aria-label="Document Editor" data-i18n-aria-label="fDocumentEditor"></div>
+                    </article>
+                  </div>
+                  <div class="editor-status">
+                    <span id="word-count" data-i18n="f0Words">
+                      0 words
+                    </span>
+                  </div>
+                </section>
+                <section id="preview" aria-label="Reading Preview" hidden data-i18n-aria-label="fReadingPreview">
+                  <header class="preview-head">
+                    <span data-i18n="fReadingView">Reading View</span>
+                    <span class="preview-pill" data-i18n="fReadOnly">
+                      Read Only
+                    </span>
+                  </header>
+                  <div class="preview-scroll" tabindex="0">
+                    <div id="preview-content"></div>
+                  </div>
+                </section>
+                <button
+                  id="outline-button"
+                  type="button"
+                  class="rs-outline-toggle"
+                  data-icon="chevron-left"
+                  data-tip="展开大纲"
+                  aria-label="展开大纲"
+                  aria-controls="right-outline"
+                  aria-expanded="false"></button>
+                <nav id="right-outline" class="rs-outline-panel" aria-labelledby="right-outline-label" hidden>
+                  <div class="rs-outline-inner">
+                    <div id="right-outline-label" class="outline-label" data-i18n="fOutline">
+                      Outline
+                    </div>
+                    <div class="outline-list"></div>
+                  </div>
+                </nav>
+              </main>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="heading-menu"
+        class="menu"
+        role="menu"
+        aria-label="Heading Level"
+        hidden
+        data-i18n-aria-label="fHeadingLevel"
+      >
+        <button role="menuitemradio" data-menu-action="paragraph" aria-checked="true" tabindex="-1">
+          <span data-i18n="fBody">Body</span>
+          <kbd data-keys="Mod+0" aria-hidden="true">
+            Ctrl+0
+          </kbd>
+        </button>
+        <button role="menuitemradio" data-menu-action="h1" aria-checked="false" tabindex="-1">
+          <span data-i18n="fHeading1">Heading 1</span>
+          <kbd data-keys="Mod+1" aria-hidden="true">
+            Ctrl+1
+          </kbd>
+        </button>
+        <button role="menuitemradio" data-menu-action="h2" aria-checked="false" tabindex="-1">
+          <span data-i18n="fHeading2">Heading 2</span>
+          <kbd data-keys="Mod+2" aria-hidden="true">
+            Ctrl+2
+          </kbd>
+        </button>
+        <button role="menuitemradio" data-menu-action="h3" aria-checked="false" tabindex="-1">
+          <span data-i18n="fHeading3">Heading 3</span>
+          <kbd data-keys="Mod+3" aria-hidden="true">
+            Ctrl+3
+          </kbd>
+        </button>
+        <button role="menuitemradio" data-menu-action="h4" aria-checked="false" tabindex="-1">
+          <span data-i18n="fHeading4">Heading 4</span>
+          <kbd data-keys="Mod+4" aria-hidden="true">
+            Ctrl+4
+          </kbd>
+        </button>
+        <button role="menuitemradio" data-menu-action="h5" aria-checked="false" tabindex="-1">
+          <span data-i18n="fHeading5">Heading 5</span>
+          <kbd data-keys="Mod+5" aria-hidden="true">
+            Ctrl+5
+          </kbd>
+        </button>
+        <button role="menuitemradio" data-menu-action="h6" aria-checked="false" tabindex="-1">
+          <span data-i18n="fHeading6">Heading 6</span>
+          <kbd data-keys="Mod+6" aria-hidden="true">
+            Ctrl+6
+          </kbd>
+        </button>
+      </div>
+
+      <div
+        id="block-menu"
+        class="menu"
+        role="menu"
+        aria-label="Block actions"
+        data-i18n-aria-label="fBlockActions"
+        hidden
+      >
+        <button
+          id="block-convert"
+          role="menuitem"
+          data-menu-action="convert"
+          aria-haspopup="menu"
+          aria-controls="block-convert-menu"
+          aria-expanded="false"
+          tabindex="-1"
+        >
+          <span data-i18n="fConvertBlockTo">Convert to</span>
+          <span aria-hidden="true">›</span>
+        </button>
+        <div
+          id="block-convert-menu"
+          class="menu"
+          role="menu"
+          aria-label="Convert to"
+          data-i18n-aria-label="fConvertBlockTo"
+          hidden
+        >
+          <button role="menuitem" data-menu-action="paragraph" tabindex="-1" data-i18n="fBody">
+            Body
+          </button>
+          <button role="menuitem" data-menu-action="h1" tabindex="-1" data-i18n="fHeading1">
+            Heading 1
+          </button>
+          <button role="menuitem" data-menu-action="h2" tabindex="-1" data-i18n="fHeading2">
+            Heading 2
+          </button>
+          <button role="menuitem" data-menu-action="h3" tabindex="-1" data-i18n="fHeading3">
+            Heading 3
+          </button>
+          <button role="menuitem" data-menu-action="bullet" tabindex="-1" data-i18n="fBulletedList">
+            Bulleted List
+          </button>
+          <button role="menuitem" data-menu-action="ordered" tabindex="-1" data-i18n="fNumberedList">
+            Numbered List
+          </button>
+          <button role="menuitem" data-menu-action="task" tabindex="-1" data-i18n="fTaskList">
+            Task List
+          </button>
+          <button role="menuitem" data-menu-action="quote" tabindex="-1" data-i18n="fBlockquote">
+            Blockquote
+          </button>
+          <button role="menuitem" data-menu-action="code" tabindex="-1" data-i18n="fCodeBlock">
+            Code Block
+          </button>
+        </div>
+        <div role="separator"></div>
+        <button role="menuitem" data-menu-action="duplicate" tabindex="-1">
+          <span data-i18n="fDuplicateBlock">Duplicate</span>
+        </button>
+        <button role="menuitem" data-menu-action="delete" tabindex="-1">
+          <span data-i18n="fDeleteBlock">Delete</span>
+        </button>
+        <button role="menuitem" data-menu-action="up" tabindex="-1">
+          <span data-i18n="fMoveBlockUp">Move up</span>
+          <kbd data-keys="Alt+Shift+↑">Alt+Shift+↑</kbd>
+        </button>
+        <button role="menuitem" data-menu-action="down" tabindex="-1">
+          <span data-i18n="fMoveBlockDown">Move down</span>
+          <kbd data-keys="Alt+Shift+↓">Alt+Shift+↓</kbd>
+        </button>
+      </div>
+
+      <dialog
+        id="appearance"
+        aria-label="设置"
+      >
+        <div class="rs-settings-shell">
+          <aside class="rs-settings-nav">
+            <div class="rs-settings-nav-title">设置</div>
+            <div class="rs-settings-tabs" role="tablist" aria-orientation="vertical">
+              <button
+                type="button"
+                class="rs-settings-tab"
+                role="tab"
+                data-settings-tab="appearance"
+                aria-selected="true"
+                aria-controls="settings-panel-appearance"
+              >
+                外观
+              </button>
+              <button
+                type="button"
+                class="rs-settings-tab"
+                role="tab"
+                data-settings-tab="about"
+                aria-selected="false"
+                aria-controls="settings-panel-about"
+              >
+                关于
+              </button>
+            </div>
+          </aside>
+          <div class="rs-settings-main">
+            <div class="dialog-head rs-settings-head">
+              <h2 id="settings-panel-title">外观</h2>
+              <button
+                type="button"
+                class="tool"
+                data-close="appearance"
+                aria-label="Close Appearance"
+                data-icon="close"
+                data-i18n-aria-label="fCloseAppearance"></button>
+            </div>
+            <div id="settings-panel-appearance" class="rs-settings-panel" role="tabpanel">
+              <div id="themes" role="radiogroup" aria-label="Theme" data-i18n-aria-label="fTheme">
+                <div class="theme-group">
+                  <div class="theme-row" data-series="all"></div>
+                </div>
+              </div>
+              <div class="auto-switch">
+                <span id="auto-label" data-i18n="fSwitchAutomatically">
+                  Switch Automatically
+                </span>
+                <div class="segmented" role="radiogroup" aria-labelledby="auto-label">
+                  <button role="radio" data-auto="off" data-i18n="fOff">
+                    Off
+                  </button>
+                  <button role="radio" data-auto="system" data-i18n="fFollowSystem">
+                    Follow System
+                  </button>
+                </div>
+              </div>
+              <div class="auto-switch">
+                <span id="autospace-label">
+                  中英文混排自动空格
+                </span>
+                <div class="segmented" role="radiogroup" aria-labelledby="autospace-label">
+                  <button type="button" role="radio" data-autospace="on">
+                    开启
+                  </button>
+                  <button type="button" role="radio" data-autospace="off">
+                    关闭
+                  </button>
+                </div>
+              </div>
+              <div class="type-settings">
+                <label>
+                  <span data-i18n="fFontSize">Font Size</span>
+                  <select id="font-size" aria-label="Body Font Size" data-i18n-aria-label="fBodyFontSize">
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                    <option value="20">20</option>
+                    <option value="22">22</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="fLineWidth">Line Width</span>
+                  <select id="line-width" aria-label="Body Line Width" data-i18n-aria-label="fBodyLineWidth">
+                    <option value="normal" data-i18n="fComfortable">
+                      Comfortable
+                    </option>
+                    <option value="wide" data-i18n="fWide">
+                      Wide
+                    </option>
+                    <option value="full" data-i18n="fFullWidth">
+                      Full Width
+                    </option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div id="settings-panel-about" class="rs-settings-panel rs-about-panel" role="tabpanel" hidden>
+              <div class="rs-about-card">
+                <img class="rs-about-icon" src="/logo.png" alt="ReadSoul 应用图标" />
+                <div class="rs-about-name" aria-label="ReadSoul">
+                  <span>Read</span>
+                  <span class="s-accent">S</span>
+                  <span>oul</span>
+                </div>
+                <div class="rs-about-version"><span id="rs-about-version"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog id="rename-dialog" aria-label="Name Draft" data-i18n-aria-label="fNameDraft">
+        <form id="rename-form">
+          <h2 data-i18n="fGiveThisPageAName">Give This Page a Name</h2>
+          <input
+            id="rename-input"
+            aria-label="Document Name"
+            maxlength="100"
+            required
+            data-i18n-aria-label="fDocumentName"
+          />
+          <div class="dialog-actions">
+            <button type="button" data-close="rename-dialog" data-i18n="fCancel">
+              Cancel
+            </button>
+            <button type="submit" data-i18n="fSaveName">
+              Save Name
+            </button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="wiki-dialog" aria-labelledby="wiki-dialog-title">
+        <h2 id="wiki-dialog-title" data-i18n="fWikiChoose">
+          Choose Referenced Document
+        </h2>
+        <p class="dialog-note" data-i18n="fWikiChooseNote">
+          Several documents have this title. Choose the one to open.
+        </p>
+        <div id="wiki-candidates"></div>
+        <div class="dialog-actions">
+          <button type="button" data-close="wiki-dialog" data-i18n="fCancel">
+            Cancel
+          </button>
+        </div>
+      </dialog>
+
+      <dialog id="close-dialog" aria-label="Document Not Saved" data-i18n-aria-label="fDocumentNotSaved">
+        <h2 data-i18n="fSaveThisPageFirst">Save This Page First</h2>
+        <p data-i18n="fYourLatestChangesHaveNotBeenSavedToThe">
+          Your latest changes have not been saved to the draft. The text is still in the editor.
+        </p>
+        <div class="dialog-actions">
+          <button type="button" data-close="close-dialog" data-i18n="fKeepEditing">
+            Keep Editing
+          </button>
+          <button type="button" data-action="retry-close" data-i18n="fRetryAndQuit">
+            Retry and Quit
+          </button>
+          <button type="button" data-action="rescue" data-i18n="fSaveACopy">
+            Save a Copy
+          </button>
+          <button type="button" id="discard-close" class="danger" data-i18n="fDiscardChangesAndQuit">
+            Discard Changes and Quit
+          </button>
+        </div>
+      </dialog>
+
+      <dialog id="missing-dialog" aria-label="Missing Images" data-i18n-aria-label="fMissingImages">
+        <h2 data-i18n="fSomeImagesCouldNotBeFound">Some Images Could Not Be Found</h2>
+        <p id="missing-list" tabindex="0" role="region" aria-label="Missing Images" data-i18n-aria-label="fMissingImages"></p>
+        <div class="dialog-actions">
+          <button type="button" data-close="missing-dialog" data-i18n="fGoBack">
+            Go Back
+          </button>
+          <button
+            type="button"
+            id="export-anyway"
+            class="primary"
+            data-i18n="fExportWithOriginalReferences"
+          >
+            Export with Original References
+          </button>
+        </div>
+      </dialog>
+
+      <dialog id="link-dialog" aria-label="Edit Link" data-i18n-aria-label="fEditLink">
+        <form id="link-form">
+          <div class="dialog-head">
+            <h2 data-i18n="fLink">Link</h2>
+            <button
+              type="button"
+              class="tool"
+              data-close="link-dialog"
+              aria-label="Close Link Panel"
+              data-icon="close"
+              data-i18n-aria-label="fCloseLinkPanel"></button>
+          </div>
+          <label class="field-label">
+            <span data-i18n="fDisplayText">Display Text</span>
+            <input
+              id="link-text"
+              required
+              autocomplete="off"
+              aria-label="Link Text"
+              data-i18n-aria-label="fLinkText"
+            />
+          </label>
+          <label class="field-label">
+            <span data-i18n="fLinkURL">Link URL</span>
+            <input
+              id="link-url"
+              required
+              autocomplete="off"
+              spellcheck={false}
+              placeholder="https:// or #heading"
+              aria-label="Link URL"
+              data-i18n-placeholder="fHttpsOrHeading"
+              data-i18n-aria-label="fLinkURL"
+            />
+          </label>
+          <p id="link-error" role="alert" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" id="link-open" data-i18n="fOpenLink">
+              Open Link
+            </button>
+            <button type="button" id="link-remove" data-i18n="fRemoveLink">
+              Remove Link
+            </button>
+            <button type="submit" data-i18n="fApplyLink">
+              Apply Link
+            </button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="delivery-dialog" aria-label="Export" data-i18n-aria-label="fExport2">
+        <div class="dialog-head">
+          <h2 data-i18n="fExportThisPage">Export This Page</h2>
+          <button
+            type="button"
+            class="tool"
+            data-close="delivery-dialog"
+            aria-label="Close Export Panel"
+            data-icon="close"
+            data-i18n-aria-label="fCloseExportPanel"></button>
+        </div>
+        <label class="delivery-compat-row">
+          <input id="delivery-standard-md" type="checkbox" />
+          <span>保存纯标准 Markdown（将自定义排版标签转为通用 ![]()，兼容 Obsidian / Typora / GitHub）</span>
+        </label>
+        <div class="delivery-options">
+          <button type="button" data-deliver="saveAs">
+            <b data-i18n="fSaveMarkdown">Save Markdown</b>
+            <small data-i18n="fAStandardMdFileForFurtherEditing">
+              A standard .md file for further editing
+            </small>
+          </button>
+          <button type="button" data-deliver="export">
+            <b data-i18n="fDocumentAndImagesZIP">Document and Images ZIP</b>
+            <small data-i18n="fIncludeLocalImages">Include local images</small>
+          </button>
+          <button type="button" data-deliver="pdf">
+            <b data-i18n="fExportPDF">Export PDF</b>
+            <small data-i18n="fFullyFormattedForReadingAndSharing">
+              Fully formatted for reading and sharing
+            </small>
+          </button>
+          <button type="button" data-deliver="docx">
+            <b data-i18n="fWordDocument">Word Document (.docx)</b>
+            <small data-i18n="fWordDescription">
+              An editable Word document with headings, lists, tables, images, formulas and footnotes.
+            </small>
+          </button>
+          <button type="button" data-deliver="copyRich">
+            <b data-i18n="fCopyRichText">Copy Rich Text</b>
+            <small data-i18n="fPasteIntoEmailOrDocumentsWithBasicFormatting">
+              Paste into email or documents with basic formatting
+            </small>
+          </button>
+          <button type="button" data-deliver="html">
+            <b data-i18n="fDownloadHTML">Download HTML</b>
+            <small data-i18n="fEmbeddedLocalImagesForOfflineReading">
+              Embedded local images for offline reading
+            </small>
+          </button>
+        </div>
+        <p
+          class="dialog-note"
+          data-i18n="fExternalImagesRemainAsLinksRichTextImageSupport"
+        >
+          External images remain as links. Rich text image support depends on the receiving app.
+        </p>
+      </dialog>
+
+      <dialog id="ready-dialog" aria-label="Document Ready" data-i18n-aria-label="fDocumentReady">
+        <h2 data-i18n="fYourDocumentIsReady">Your Document Is Ready</h2>
+        <p id="ready-info"></p>
+        <div class="dialog-actions">
+          <button type="button" data-close="ready-dialog" data-i18n="fBackToEditing">
+            Back to Editing
+          </button>
+          <button type="button" id="ready-go" class="primary" data-i18n="fContinue">
+            Continue
+          </button>
+        </div>
+      </dialog>
+
+      <dialog id="global-search-dialog" class="rs-gsearch-dialog" aria-label="全局全文搜索">
+        <div class="rs-gsearch-head">
+          <span class="rs-gsearch-icon" data-icon="find"></span>
+          <input
+            id="global-search-input"
+            type="search"
+            placeholder="在草稿和已打开文件夹中全文检索内容或标题…"
+            aria-label="全局全文搜索输入框"
+            autocomplete="off"
+          />
+          <kbd class="rs-gsearch-kbd">Esc</kbd>
+          <button
+            id="global-search-close"
+            type="button"
+            class="tool"
+            aria-label="关闭全局搜索"
+            data-icon="close"></button>
+        </div>
+        <div id="global-search-status" class="rs-gsearch-status" role="status" aria-live="polite"></div>
+        <div id="global-search-list" class="rs-gsearch-list"></div>
+      </dialog>
+
+      <dialog id="fs-prompt-dialog" class="rs-fs-dialog" aria-label="文件夹与文档操作">
+        <form id="fs-prompt-form">
+          <h2 id="fs-prompt-title">新建</h2>
+          <input id="fs-prompt-input" type="text" required autocomplete="off" />
+          <div class="dialog-actions">
+            <button type="button" id="fs-prompt-cancel">
+              取消
+            </button>
+            <button type="submit" class="primary">
+              确定
+            </button>
+          </div>
+        </form>
+      </dialog>
+
+      <div id="print-document" aria-hidden="true"></div>
+      <div id="toast" role="status" aria-live="polite" hidden></div>
+      <input
+        id="image-input"
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif,image/bmp"
+        multiple
+        hidden
+      />
+      <input id="open-input" type="file" accept=".md,.markdown,.txt" hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

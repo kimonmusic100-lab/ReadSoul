@@ -1,29 +1,14 @@
-import {messagesIn,type Messages} from '../locales';
+import {messages,type Messages} from '../locales';
 import type {DocStatus,LocaleNotice} from './types';
 import {keyLabel} from './platform';
 
-const localeKey='mygo:locale';
-const listeners=new Set<()=>void>();
-function browserChoice(){try{return localStorage.getItem(localeKey)||''}catch{return ''}}
-function supported(tags:readonly string[]){for(const tag of tags){try{const language=new Intl.Locale(tag).language;if(language==='en')return 'en';if(language==='zh')return 'zh-Hans'}catch{}}return 'zh-Hans'}
-export function pageLocale(){
- const native=typeof window!=='undefined'?window.mygo?.locale:undefined;
- if(native)return native;
- const choice=browserChoice();if(choice)return supported([choice]);
- return supported(typeof navigator==='undefined'?[]:navigator.languages||[navigator.language]);
-}
-// The language of `messages`, cheap enough to read for every editor widget.
-export let activeLocale=pageLocale();
-export let messages:Messages=messagesIn(activeLocale);
-function refresh(){activeLocale=pageLocale();messages=messagesIn(activeLocale);localizePage();for(const listener of listeners)listener()}
-export function onPageLocaleChange(listener:()=>void){listeners.add(listener);return ()=>listeners.delete(listener)}
-export async function setPageLocale(locale:string){
- if(window.mygo){await window.mygo.call('Desktop.SetLocale',locale);return}
- try{if(locale)localStorage.setItem(localeKey,locale);else localStorage.removeItem(localeKey)}catch{}
- refresh();
-}
+export const activeLocale='zh-Hans';
+export function pageLocale(){return activeLocale}
+export {messages};
+
 export function localizePage(root:ParentNode=document){
- document.documentElement.lang=pageLocale();document.documentElement.dir='ltr';
+ document.documentElement.lang=activeLocale;
+ document.documentElement.dir='ltr';
  // Messages with a {shortcut} take the element's data-shortcut, written for this platform; others ignore it.
  const lookup=messages as unknown as Record<string,(shortcut?:string)=>string>;
  const shortcut=(el:HTMLElement)=>el.dataset.shortcut?keyLabel(el.dataset.shortcut):undefined;
@@ -32,18 +17,17 @@ export function localizePage(root:ParentNode=document){
  // Tooltip text never carries keys: the tooltip shows data-shortcut beside it.
  for(const el of root.querySelectorAll<HTMLElement>('[data-i18n-tip]')){const say=lookup[el.dataset.i18nTip!];if(say)el.dataset.tip=say()}
 }
+
 const statusMessages={
  draftSaved:'bStatusDraftSaved',fileSaved:'bStatusFileSaved',fileReadOnly:'bStatusFileReadOnly',fileUnavailable:'bStatusFileUnavailable',diskUnreadable:'bStatusDiskUnreadable',diskReloaded:'bStatusDiskReloaded',reloadRecoveryFailed:'bStatusReloadRecoveryFailed',diskConflict:'bStatusDiskConflict',imageSaveFailed:'bStatusImageSaveFailed',fileSaveFailed:'bStatusFileSaveFailed',saveFailed:'bStatusSaveFailed',recoveryUpdateFailed:'bStatusRecoveryUpdateFailed',
 } as const;
 type Status=Pick<DocStatus,'status'|'statusCode'|'conflict'>;
 function statusCode(doc:Status){
  if(doc.statusCode&&doc.statusCode in statusMessages)return doc.statusCode as keyof typeof statusMessages;
- // Old web fixtures and drafts can carry only the original status text.
- const source=messagesIn('zh-Hans');
- for(const code of Object.keys(statusMessages) as (keyof typeof statusMessages)[])if(source[statusMessages[code]]()===doc.status)return code;
+ for(const code of Object.keys(statusMessages) as (keyof typeof statusMessages)[])if(messages[statusMessages[code]]()===doc.status)return code;
  return doc.conflict?'diskConflict':'draftSaved';
 }
-export function catalogText(key:string,args:Record<string,unknown>={},fallback=''){
+function catalogText(key:string,args:Record<string,unknown>={},fallback=''){
  switch(key){
   case 'bCorruptDrafts':return messages.bCorruptDrafts(Number(args.count||0));
   case 'bShortcutUnavailable':return messages.bShortcutUnavailable(String(args.shortcut||''));
@@ -58,20 +42,8 @@ export class CatalogError extends Error {
 }
 export function localizedError(error:unknown){
  if(error instanceof CatalogError)return error.translated();
- const text=error instanceof Error?error.message:String(error);
- // Native bridge errors contain prose; no-argument catalog errors can still be identified.
- for(const tag of ['zh-Hans','en']){
-  const source=messagesIn(tag) as unknown as Record<string,()=>string>;
-  for(const key of Object.keys(source))if(key.startsWith('b')&&!['bCorruptDrafts','bShortcutUnavailable','bImageUnreadable','bOpenFailed'].includes(key)&&source[key]()===text)return catalogText(key);
- }
- return text;
+ return error instanceof Error?error.message:String(error);
 }
 export function noticeText(notice:LocaleNotice){return catalogText(notice.key||'',notice.args,notice.text||'')}
 export function statusText(doc:Status){return messages[statusMessages[statusCode(doc)]]()}
 export function statusFailed(doc:Status){return ['reloadRecoveryFailed','imageSaveFailed','fileSaveFailed','fileReadOnly','saveFailed','recoveryUpdateFailed'].includes(statusCode(doc))}
-if(typeof window!=='undefined'){
- window.mygo?.on('mygo:locale',refresh);
- window.addEventListener('mygo:locale',refresh);
- window.addEventListener('languagechange',()=>{if(!browserChoice())refresh()});
- window.addEventListener('storage',event=>{if(event.key===localeKey)refresh()});
-}

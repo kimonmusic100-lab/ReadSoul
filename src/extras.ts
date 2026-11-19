@@ -109,7 +109,7 @@ export function extraRanges(state:EditorState):Extras{
    while(scope&&scope.parent&&!containers.test(scope.parent.name))scope=scope.parent;
    const end=inlineClose(i+1);
    if(end<0||!scope||end>=scope.to)continue;
-   const label='__liubai_inline_'+(inlineCount++)+'__',from=i,to=end+1;
+   const label='__readsoul_inline_'+(inlineCount++)+'__',from=i,to=end+1;
    result.definitions.set(label,{from,to,label,textFrom:from+2,text:text.slice(from+2,end),inline:true});
    inlineRefs.push({from,to,label,inline:true});
    i=end;

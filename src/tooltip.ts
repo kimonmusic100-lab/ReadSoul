@@ -1,5 +1,4 @@
 import {keyLabel} from './platform';
-import {onPageLocaleChange} from './i18n';
 // One tooltip for the chrome: data-tip names a control and data-shortcut holds its keys, written for this platform as it shows.
 // The pointer waits 500ms; within 800ms of the last tooltip the next control shows at once. Moving focus with Tab or the arrow keys shows it at once; any other key hides it, so Escape or Enter never brings it back on the focus they hand back.
 const delay=500,warm=800,navigation=['Tab','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'],modifiers=['Shift','Control','Alt','Meta','CapsLock'];
@@ -40,5 +39,5 @@ export function attachTooltips(){
  // Any key but a modifier hides it; only focus moved by Tab, the arrows, Home or End shows it again.
  document.addEventListener('keydown',e=>{if(modifiers.includes(e.key))return;close();navigating=navigation.includes(e.key);setTimeout(()=>{navigating=false})},true);
  document.addEventListener('scroll',close,{capture:true,passive:true});
- addEventListener('resize',close);addEventListener('blur',close);onPageLocaleChange(close);
+ addEventListener('resize',close);addEventListener('blur',close);
 }

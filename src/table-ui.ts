@@ -18,7 +18,7 @@ import {keyLabel} from './platform';
 export const tableComposition=Facet.define<(view:EditorView,active:boolean,commit?:()=>void)=>void>();
 export const tableLink=Facet.define<(url:string)=>void>();
 // Keep the document parser's native contexts and reference definitions, not a cell-only parse.
-export function tableWikiLinkAt(state:EditorState,from:number,row:number,column:number,text:string,offset:number):{from:number;to:number;url:string}|null{
+function tableWikiLinkAt(state:EditorState,from:number,row:number,column:number,text:string,offset:number):{from:number;to:number;url:string}|null{
  if(![from,row,column,offset].every(Number.isInteger)||from<0||from>=state.doc.length||row<0||column<0||offset<0||offset>text.length)return null;
  const meta=frontMatterRange(state);if(meta&&from<meta.to)return null;
  let table:SyntaxNode|null=syntaxTree(state).resolveInner(from,1);
@@ -60,9 +60,9 @@ const TABLE_MENU_GROUPS:TableAction[][]=[
  ['deleteRow','deleteColumn'],
  ['left','center','right'],
  ['deleteTable']];
-export function focusTableCell(view:EditorView,position=view.state.selection.main.head){
+export function focusTableCell(view:EditorView,position=view.state.selection.main.head,row=0,col=0){
  for(const dom of view.dom.querySelectorAll<HTMLElement>('.rendered-table')){
-  const table=tables.get(dom);if(table&&position>=table.from&&position<=table.from+table.raw.length){table.focus(0,0);return true}
+  const table=tables.get(dom);if(table&&position>=table.from&&position<=table.from+table.raw.length){table.focus(row,col);return true}
  }
  return false;
 }
@@ -172,7 +172,7 @@ class TableDOM{
  }
  private bind(cell:HTMLTableCellElement){
   cell.addEventListener('click',e=>{
-   if(e.button!==0||!(e.metaKey||e.ctrlKey)||e.altKey||e.shiftKey||this.blocked()||this.view.composing||this.disposed)return;
+   if(e.button!==0||!e.ctrlKey||e.metaKey||e.altKey||e.shiftKey||this.blocked()||this.view.composing||this.disposed)return;
    const handlers=this.view.state.facet(tableLink);if(!handlers.length)return;
    const link=this.wikiLink(cell,e);if(!link)return;
    e.preventDefault();e.stopPropagation();for(const open of handlers)open(link.url);
@@ -271,13 +271,13 @@ class TableDOM{
  }
  private key(e:KeyboardEvent){
   if(e.isComposing||this.blocked())return;
-  if((e.metaKey||e.ctrlKey)&&['z','y'].includes(e.key.toLowerCase())){
+  if(e.ctrlKey&&!e.metaKey&&['z','y'].includes(e.key.toLowerCase())){
    e.preventDefault();e.stopPropagation();(e.key.toLowerCase()==='y'||e.shiftKey?redo:undo)(this.view);this.fresh=true;return;
   }
-  if((e.metaKey||e.ctrlKey)&&e.key==='/'){e.preventDefault();e.stopPropagation();this.menu.open();return}
-  if((e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey){
+  if(e.ctrlKey&&!e.metaKey&&e.key==='/'){e.preventDefault();e.stopPropagation();this.menu.open();return}
+  if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey){
    const cell=e.currentTarget as HTMLElement,k=e.key.toLowerCase();
-   // Browsers select the whole editor for ⌘A inside a nested editable cell; keep it to the cell.
+   // Browsers select the whole editor for Ctrl+A inside a nested editable cell; keep it to the cell.
    if(k==='a'){e.preventDefault();e.stopPropagation();getSelection()?.selectAllChildren(cell);return}
    // Format shortcuts apply to the cell's text, never to the document behind the table.
    const action=({b:'bold',i:'italic',u:'underline',l:'link'} as Record<string,string>)[k];

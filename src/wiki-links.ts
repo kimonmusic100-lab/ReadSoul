@@ -4,7 +4,7 @@ import MarkdownIt,{type PluginSimple} from 'markdown-it';
 import footnote from 'markdown-it-footnote';
 
 export interface WikiSyntaxMatch {target:string;end:number}
-const scheme='liubai-wiki:';
+const scheme='readsoul-wiki:';
 function name(text:string):string|null {
  if(/[\p{Cc}\[\]|]/u.test(text))return null;
  for(const ch of text){const scalar=ch.codePointAt(0)!;if(scalar>=0xd800&&scalar<=0xdfff)return null}
@@ -137,21 +137,21 @@ export const WikiSyntax:MarkdownConfig={
 export const wikiPlugin:PluginSimple=md=>{
  // Markdown-it replaces NUL before parsing. Retain that control for the syntax predicate,
  // rather than accidentally turning an invalid name into a valid title containing U+FFFD.
- md.core.ruler.before('normalize','liubai_wiki_raw_controls',state=>{
-  if(state.src.includes('\0'))state.env.liubaiWikiRaw=state.src.replace(/\r\n?/g,'\n');
+ md.core.ruler.before('normalize','readsoul_wiki_raw_controls',state=>{
+  if(state.src.includes('\0'))state.env.readsoulWikiRaw=state.src.replace(/\r\n?/g,'\n');
  });
- md.core.ruler.after('normalize','liubai_wiki_controls',state=>{
-  if(typeof state.env.liubaiWikiRaw==='string'){state.src=state.env.liubaiWikiRaw;delete state.env.liubaiWikiRaw}
+ md.core.ruler.after('normalize','readsoul_wiki_controls',state=>{
+  if(typeof state.env.readsoulWikiRaw==='string'){state.src=state.env.readsoulWikiRaw;delete state.env.readsoulWikiRaw}
  });
- md.core.ruler.before('inline','liubai_wiki_native_references',state=>{
+ md.core.ruler.before('inline','readsoul_wiki_native_references',state=>{
   if(!state.src.includes(']]['))return;
   const context:NativeContext={references:{}};
   nativeLinks.block.parse(state.src,nativeLinks,context,[]);
-  state.env.liubaiWikiReferences=context;
+  state.env.readsoulWikiReferences=context;
  });
  const blocked=new WeakMap<object,number>();
  const autolinks=new WeakMap<object,{index:number;lastIndex:number}[]>();
- md.inline.ruler.after('link','liubai_wiki',(state,silent)=>{
+ md.inline.ruler.after('link','readsoul_wiki',(state,silent)=>{
   // Validation lookahead must see literal brackets so native labels can balance them.
   if(silent||'linkLevel' in state&&state.linkLevel||state.pos<(blocked.get(state)||0))return false;
   if(state.src.slice(state.pos,state.pos+2)!=='[[')return false;
@@ -166,12 +166,12 @@ export const wikiPlugin:PluginSimple=md=>{
   }
   const match=wikiAt(state.src,state.pos);
   if(!match||match.end>state.posMax){blocked.set(state,Math.min(state.posMax,bracketRegionEnd(state.src,state.pos)));return false}
-  if((state.src[match.end]==='('||state.src[match.end]==='[')&&nativeWikiLabel(state.src.slice(state.pos),state.env.liubaiWikiReferences||{references:{}}))return false;
+  if((state.src[match.end]==='('||state.src[match.end]==='[')&&nativeWikiLabel(state.src.slice(state.pos),state.env.readsoulWikiReferences||{references:{}}))return false;
   const token=state.push('wiki_link','',0);token.content=state.src.slice(state.pos,match.end);token.meta={target:match.target};
   state.pos=match.end;return true;
  });
  // Images recursively parse their labels. Preserve their raw alt text instead of leaving an internal link token there.
- md.core.ruler.after('inline','liubai_wiki_images',state=>{
+ md.core.ruler.after('inline','readsoul_wiki_images',state=>{
   const visit=(tokens:typeof state.tokens,inImage=false)=>{
    for(const token of tokens){
     if(inImage&&token.type==='wiki_link'){token.type='text';token.meta=null}

@@ -1,5 +1,5 @@
 import {LanguageDescription} from '@codemirror/language';
-import {languages} from '@codemirror/language-data';
+import {codeLanguages} from './code-languages';
 import {classHighlighter,highlightCode} from '@lezer/highlight';
 
 export async function highlightCodeBlocks(root:HTMLElement,isCurrent:()=>boolean):Promise<void> {
@@ -8,7 +8,7 @@ export async function highlightCodeBlocks(root:HTMLElement,isCurrent:()=>boolean
   const text=code.textContent||'';
   const name=code.className.match(/(?:^|\s)language-(\S+)/)?.[1];
   if(!name||text.length>100000)continue;
-  const description=LanguageDescription.matchLanguageName(languages,name,true);
+  const description=LanguageDescription.matchLanguageName(codeLanguages,name,true);
   if(!description)continue;
   try{
    const support=await description.load();

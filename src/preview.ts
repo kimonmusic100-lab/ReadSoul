@@ -1,5 +1,6 @@
 import {renderMarkdown,headingSlug,type MarkdownRender} from './markdown';
 import {highlightCodeBlocks} from './highlight';
+import {applyFreeWrapToPreview} from './image-wrap';
 import {messages,pageLocale} from './i18n';
 import {icon} from './icons';
 
@@ -9,6 +10,7 @@ export interface PreviewControllerOptions {
  getContent: ()=>string;
  resolveImage: (documentID:string,destination:string)=>Promise<string|undefined>;
  openLink: (url:string)=>void;
+ onRendered?: ()=>void;
 }
 
 export interface PreviewController {
@@ -16,6 +18,7 @@ export interface PreviewController {
  setDocument: (documentID:string)=>boolean;
  changed: (content:boolean,line:number)=>void;
  jumpToLine: (line:number)=>void;
+ cancelFollow: ()=>void;
  composition: (active:boolean)=>void;
  refresh: ()=>void;
  preserveScroll: (update:()=>void)=>void;
@@ -62,11 +65,13 @@ export function createPreviewController(options:PreviewControllerOptions):Previe
  let followedRange='';
  const regionResize=new ResizeObserver(entries=>{
   for(const entry of entries){
+   if(entry.target===options.host){applyFreeWrapToPreview(options.host);continue}
    const region=entry.target.closest<HTMLElement>('.md-table-scroll');
    if(region)updateTableRegion(region);
    else if(entry.target instanceof HTMLPreElement)updateCodeRegion(entry.target);
   }
  });
+ regionResize.observe(options.host);
  function updateCodeRegion(region:HTMLPreElement){
   const overflow=region.scrollWidth>region.clientWidth+1;
   region.tabIndex=overflow?0:-1;
@@ -264,6 +269,8 @@ export function createPreviewController(options:PreviewControllerOptions):Previe
    pendingLine=undefined;
    scheduleFollow(line);
   }
+  options.onRendered?.();
+  applyFreeWrapToPreview(options.host);
   void next.ready.then(()=>{
    if(id!==documentID||generation!==renderGeneration)return;
    // An invalid asynchronous diagram can introduce a fallback code block.
@@ -273,6 +280,8 @@ export function createPreviewController(options:PreviewControllerOptions):Previe
    if(renderMissingImages&&saveEpoch>startedAtSaveEpoch){retryAfterSave(saveEpoch);return}
    applyJump();
    pendingJump=undefined;
+   options.onRendered?.();
+   applyFreeWrapToPreview(options.host);
   });
  };
  const scheduleRender=()=>{
@@ -421,6 +430,7 @@ export function createPreviewController(options:PreviewControllerOptions):Previe
    visible=next;
    options.host.closest<HTMLElement>('#preview')!.hidden=!next;
    if(next&&(dirty||!current))render();
+   else if(next)requestAnimationFrame(()=>applyFreeWrapToPreview(options.host));
    else if(!next)cancelFollow();
   },
   setDocument(next){
@@ -451,6 +461,7 @@ export function createPreviewController(options:PreviewControllerOptions):Previe
     else{applyJump();const target=pendingJump,generation=renderGeneration;void current.ready.then(()=>{if(pendingJump!==target||generation!==renderGeneration)return;applyJump();pendingJump=undefined})}
    }
   },
+  cancelFollow,
   composition(active){
    composing=active;
    if(active){

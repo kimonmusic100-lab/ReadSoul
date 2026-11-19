@@ -27,8 +27,6 @@ export interface MarkdownRender {
  dispose: ()=>void;
 }
 
-export const sanitizeStats={calls:0};
-
 const parser=new MarkdownIt({html:true,linkify:true,typographer:false});
 parser.linkify.set({fuzzyLink:false,fuzzyEmail:false,fuzzyIP:false});
 parser.linkify.add('www.',{
@@ -39,7 +37,7 @@ parser.linkify.add('www.',{
  normalize(match){match.url='http://'+match.url},
 });
 
-export function splitFrontMatter(content:string):{raw:string|null;body:string;lines:number} {
+function splitFrontMatter(content:string):{raw:string|null;body:string;lines:number} {
  if(/^---\r?\n/.test(content)){
   const lines=content.split('\n',200);
   let end=lines[0].length+1;
@@ -62,9 +60,9 @@ export function headingSlug(text:string,used:Map<string,number>):string {
 // Keep author-HTML hooks private: Mermaid also uses DOMPurify with its own SVG policy.
 const authorPurifier=typeof window==='undefined'?DOMPurify:DOMPurify(window);
 const allowedTags='a abbr b blockquote br caption center code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img input ins kbd li mark ol p pre q s samp section small span strike strong sub summary sup table tbody td tfoot th thead tr u ul var'.split(' ');
-// DOMPurify's default URI rule plus the app's own image scheme, so a resized <img src="liubai-asset:…"> keeps its source.
-const allowedURI=/^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix|liubai-asset|liubai-wiki):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
-const allowedAttributes='href src alt title width height align valign colspan rowspan open id class start reversed type checked disabled aria-label aria-hidden lang dir datetime cite scope data-line data-line-end data-image-source'.split(' ');
+// DOMPurify's default URI rule plus the app's own image scheme, so a resized <img src="readsoul-asset:…"> keeps its source.
+const allowedURI=/^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix|readsoul-asset|readsoul-wiki):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+const allowedAttributes='href src alt title width height align valign colspan rowspan open id class start reversed type checked disabled aria-label aria-hidden lang dir datetime cite scope data-line data-line-end data-image-source data-x data-y'.split(' ');
 if(authorPurifier.addHook)authorPurifier.addHook('uponSanitizeAttribute',(node,data)=>{
  if(data.attrName==='class')data.attrValue=data.attrValue.split(/\s+/).filter(value=>/^(md-|language-|task-list|contains-task-list|footnote|markdown-alert)/.test(value)).join(' ');
  else if(data.attrName==='style'&&/^T[HD]$/.test(node.nodeName)&&/^text-align:\s*(left|center|right);?$/i.test(data.attrValue))data.forceKeepAttr=true;
@@ -84,7 +82,7 @@ function lineAttributes(map:[number,number]|null):string {
 }
 
 const lineMapPlugin:PluginSimple=md=>{
- md.core.ruler.after('block','liubai_line_maps',state=>{
+ md.core.ruler.after('block','readsoul_line_maps',state=>{
   const offset=state.env.lineOffset||0;
   for(const token of state.tokens){
    if(token.map)token.map=[token.map[0]+offset,token.map[1]+offset];
@@ -111,7 +109,7 @@ const lineMapPlugin:PluginSimple=md=>{
 };
 
 const taskPlugin:PluginSimple=md=>{
- md.core.ruler.after('inline','liubai_task_items',state=>{
+ md.core.ruler.after('inline','readsoul_task_items',state=>{
   const items:{index:number;level:number;seenParagraph:boolean;inFirstParagraph:boolean}[]=[];
   const lists:number[]=[];
   for(let index=0;index<state.tokens.length;index++){
@@ -137,12 +135,12 @@ const taskPlugin:PluginSimple=md=>{
     token.content=token.content.slice(match[0].length);
     const checked=match[1].toLowerCase()==='x';
     const checkbox=new state.Token('html_inline','',0);
-    checkbox.meta={...checkbox.meta,liubai:true};
+    checkbox.meta={...checkbox.meta,readsoul:true};
     checkbox.content=`<input type="checkbox" disabled${checked?' checked':''} aria-label="${checked?messages.fComplete():messages.fIncomplete()}"> `;
     token.children?.unshift(checkbox);
     const item=state.tokens[items[items.length-1].index];
     item.attrJoin('class','md-task');
-    item.meta={...item.meta,liubaiTask:match[1].toLowerCase()==='x'};
+    item.meta={...item.meta,readsoulTask:match[1].toLowerCase()==='x'};
     item.attrJoin('class','task-list-item');
     if(lists.length)state.tokens[lists[lists.length-1]].attrJoin('class','task-list');
    }
@@ -151,7 +149,7 @@ const taskPlugin:PluginSimple=md=>{
 };
 
 const semanticClassPlugin:PluginSimple=md=>{
- md.core.ruler.after('liubai_task_items','liubai_semantic_classes',state=>{
+ md.core.ruler.after('readsoul_task_items','readsoul_semantic_classes',state=>{
   for(const token of state.tokens){
    if(token.type==='heading_open')token.attrJoin('class',`md-${token.tag}`);
    else if(token.type==='paragraph_open')token.attrJoin('class','md-p');
@@ -170,7 +168,7 @@ const semanticClassPlugin:PluginSimple=md=>{
 };
 
 const githubAlerts:PluginSimple=md=>{
- md.core.ruler.after('inline','liubai_github_alerts',state=>{
+ md.core.ruler.after('inline','readsoul_github_alerts',state=>{
   const titles:Record<string,string>={note:messages.fNote(),tip:messages.fTip(),important:messages.fImportant(),warning:messages.fWarning(),caution:messages.fCaution()};
   for(let i=state.tokens.length-1;i>=0;i--){
    const open=state.tokens[i],paragraph=state.tokens[i+1],inline=state.tokens[i+2];
@@ -187,7 +185,7 @@ const githubAlerts:PluginSimple=md=>{
    }
    inline.content=inline.content.replace(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*\n?/i,'');
    const title=new state.Token('html_block','',0);
-   title.meta={...title.meta,liubai:true};
+   title.meta={...title.meta,readsoul:true};
    title.content=`<p class="markdown-alert-title">${titles[kind]}</p>\n`;
    state.tokens.splice(i+1,0,title);
   }
@@ -243,19 +241,18 @@ export function renderMarkdown(content:string,options:MarkdownOptions):MarkdownR
  const env:{lineOffset:number;wikiLinks?:'interactive'|'text';math?:{source:string;display:boolean}[];mathID?:string;mermaid?:{source:string;fallback:string}[];mermaidID?:string}={lineOffset:meta.lines,wikiLinks:options.wikiLinks};
  const tokens=parser.parse(meta.body,env);
  for(const token of tokens){
-  if(token.type==='html_block'&&!token.meta?.liubai)token.content=stripEventHandlers(token.content);
-  for(const child of token.children||[])if(child.type==='html_inline'&&!child.meta?.liubai)child.content=stripEventHandlers(child.content);
+  if(token.type==='html_block'&&!token.meta?.readsoul)token.content=stripEventHandlers(token.content);
+  for(const child of token.children||[])if(child.type==='html_inline'&&!child.meta?.readsoul)child.content=stripEventHandlers(child.content);
  }
- const authorHTML=tokens.some(t=>(t.type==='html_block'&&!t.meta?.liubai)||(t.children||[]).some(c=>c.type==='html_inline'&&!c.meta?.liubai));
+ const authorHTML=tokens.some(t=>(t.type==='html_block'&&!t.meta?.readsoul)||(t.children||[]).some(c=>c.type==='html_inline'&&!c.meta?.readsoul));
  const rendered=parser.renderer.render(tokens,parser.options,env);
  const properties=meta.raw!==null&&options.frontMatter!=='hide'?`<details class="md-front-matter" data-line="0" data-line-end="${meta.lines-1}"><summary>${parser.utils.escapeHtml(messages.fDocumentProperties())}</summary><pre>${parser.utils.escapeHtml(meta.raw)}</pre></details>`:'';
  const template=document.createElement('template');
  if(authorHTML){
-  sanitizeStats.calls++;
   template.innerHTML=authorPurifier.sanitize(properties+rendered,{ALLOWED_TAGS:allowedTags,ALLOWED_ATTR:allowedAttributes,ADD_URI_SAFE_ATTR:['data-image-source','data-line','data-line-end'],ALLOW_DATA_ATTR:false,FORBID_ATTR:['style'],ALLOWED_URI_REGEXP:allowedURI});
  }else template.innerHTML=properties+rendered;
  if(options.wikiLinks!=='interactive')for(const link of template.content.querySelectorAll('a[href]')){
-  if(/^liubai-wiki:/i.test(link.getAttribute('href')||''))link.removeAttribute('href');
+  if(/^readsoul-wiki:/i.test(link.getAttribute('href')||''))link.removeAttribute('href');
  }
  for(const input of template.content.querySelectorAll('input')){
   if(input.type!=='checkbox')input.remove();

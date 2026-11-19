@@ -5,7 +5,7 @@ import {messages} from './i18n';
 
 const escaped=(text:string,pos:number)=>{let n=0;while(pos>0&&text[--pos]==='\\')n++;return n%2===1};
 // Both adapters call these predicates on their paragraph's raw source. Native Markdown parsers own code, HTML tags and blocks, and link destinations.
-export function inlineMathEnd(text:string,start:number):number{
+function inlineMathEnd(text:string,start:number):number{
  if(text[start]!=='$'||text[start+1]==='$'||!text[start+1]||/\s/.test(text[start+1])||escaped(text,start))return -1;
  for(let end=start+1;end<text.length&&text[end]!=='\n'&&text[end]!=='\r';end++){
   if(text[end]!=='$'||escaped(text,end))continue;
@@ -14,10 +14,10 @@ export function inlineMathEnd(text:string,start:number):number{
  }
  return -1;
 }
-export function displayMathBody(text:string):string|null{
+function displayMathBody(text:string):string|null{
  const raw=text.trimEnd();return raw.startsWith('$$')&&raw.length>=4&&raw.endsWith('$$')&&!escaped(raw,raw.length-2)?raw.slice(2,-2).trim():null;
 }
-export const mathFence=(text:string)=>/^(`{3,}|~{3,})[ \t]*math[ \t]*$/.exec(text);
+const mathFence=(text:string)=>/^(`{3,}|~{3,})[ \t]*math[ \t]*$/.exec(text);
 export const MathSyntax:MarkdownConfig={
  defineNodes:['InlineMath','MathMark',{name:'MathBlock',block:true},{name:'MathFence',block:true},'MathText'],
  parseInline:[{name:'InlineMath',before:'Escape',parse(cx,next,pos){
@@ -56,14 +56,14 @@ export const MathSyntax:MarkdownConfig={
 };
 export const mathPlugin:PluginSimple=md=>{
  // Code spans, HTML tags, escapes and destinations are consumed by their own rules before a dollar is seen.
- md.inline.ruler.before('escape','liubai_math',(state,silent)=>{
+ md.inline.ruler.before('escape','readsoul_math',(state,silent)=>{
   if(state.src[state.pos]!=='$')return false;
   const start=state.pos;
   if(state.src[start+1]==='$'){let end=start+2;while(state.src[end]==='$')end++;if(!silent)state.pending+=state.src.slice(start,end);state.pos=end;return true}
   const end=inlineMathEnd(state.src,start);if(end<0||end>state.posMax)return false;
   if(!silent){const token=state.push('math_inline','',0);token.content=state.src.slice(start+1,end-1)}state.pos=end;return true;
  });
- md.core.ruler.before('inline','liubai_math_blocks',state=>{
+ md.core.ruler.before('inline','readsoul_math_blocks',state=>{
   for(let i=0;i<state.tokens.length;i++){
    const token=state.tokens[i],inline=state.tokens[i+1],close=state.tokens[i+2];
    if(token.type==='paragraph_open'&&inline?.type==='inline'&&close?.type==='paragraph_close'){
@@ -83,13 +83,12 @@ export const mathPlugin:PluginSimple=md=>{
 
 export type MathOutput='htmlAndMathml'|'mathml';
 export interface MathResult {html:string;error?:string}
-const errorColor='liubai-math-error-'+Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
+const errorColor='readsoul-math-error-'+Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
 // Least recently used, sized for every formula of a long document: split preview renders all of them again after each pause.
 const cache=new Map<string,MathResult>(),escapeHTML=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-export const mathRenderStats={calls:0,hits:0};
-export function renderMath(source:string,display:boolean,output:MathOutput='htmlAndMathml'):MathResult{
- const key=JSON.stringify([source,display,output]),cached=cache.get(key);if(cached){cache.delete(key);cache.set(key,cached);mathRenderStats.hits++;return cached}
- let result:MathResult;mathRenderStats.calls++;
+function renderMath(source:string,display:boolean,output:MathOutput='htmlAndMathml'):MathResult{
+ const key=JSON.stringify([source,display,output]),cached=cache.get(key);if(cached){cache.delete(key);cache.set(key,cached);return cached}
+ let result:MathResult;
  try{
   const html=katex.renderToString(source,{displayMode:display,output,throwOnError:false,trust:false,maxExpand:1000,maxSize:20,strict:'ignore',errorColor});
   // Parse errors include a title; unsupported/untrusted commands use errorColor. Neither path lets KaTeX's error markup reach a consumer.

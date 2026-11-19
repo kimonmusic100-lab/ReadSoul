@@ -28,7 +28,7 @@ function collect(state:EditorState,from:number,to:number,full=false):Block[]{
   return false;
  }});return out;
 }
-export function blocksOf(state:EditorState):Block[]{let blocks=cache.get(state);if(!blocks){blocks=collect(state,0,state.doc.length,true);cache.set(state,blocks)}return blocks}
+function blocksOf(state:EditorState):Block[]{let blocks=cache.get(state);if(!blocks){blocks=collect(state,0,state.doc.length,true);cache.set(state,blocks)}return blocks}
 // Viewport queries never force a full parse or populate the document-wide cache.
 export function visibleBlocks(state:EditorState,from:number,to:number){return collect(state,from,to)}
 export function blockAt(state:EditorState,pos:number):Block|null{

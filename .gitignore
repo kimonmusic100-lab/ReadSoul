@@ -1,11 +1,15 @@
+# Dependencies & build outputs
 /node_modules/
-/build/
-/.mygo/
-/log/
-/flux/.local/
-*.test
-.DS_Store
-__pycache__/
-mygo_windows_*.syso
+/dist/
+/.vite/
+/src-tauri/target/
 
-/outputs/
+# Local app runtime & test data
+/.readsoul-data/
+/Documents/*.mp4
+
+# Logs, caches & temporary files
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

@@ -11,7 +11,7 @@ export type SearchState={query:string;tag:string}&(
 type Timer=ReturnType<typeof setTimeout>|number;
 interface SearchClock {set:(fn:()=>void,ms:number)=>Timer;clear:(id:Timer)=>void}
 
-export function createSearchQueue(options:{
+function createSearchQueue(options:{
  request:(query:string,tag:string)=>Promise<DocumentFilterResponse>;
  show:(state:SearchState)=>void;
  clock?:SearchClock;
@@ -62,7 +62,7 @@ export function validSearchTarget(item:SearchItem,hit:SearchHit|undefined,curren
 export function createSidebarSearch(options:{
  input:HTMLInputElement;select:HTMLSelectElement;label:HTMLElement;list:HTMLElement;status:HTMLElement;consistency:HTMLElement;
  request:(query:string,tag:string)=>Promise<DocumentFilterResponse>;
- activate:(item:SearchItem,hit:SearchHit|undefined,source:boolean)=>void;
+ activate:(item:SearchItem,hit:SearchHit|undefined)=>void;
  recent:(recent:Summary[]|undefined,selected:string)=>void;escape:()=>void;
 }){
  let current:SearchState={kind:'recent',query:'',tag:''},saveState:'saved'|'pending'|'failed'='saved',composing=false;
@@ -124,9 +124,9 @@ export function createSidebarSearch(options:{
    for(const filtered of state.result.items){
     const item=filtered.document;
     const group=element('section','search-item');group.dataset.documentId=item.id;
-    const button=(cls:string,key:string,hit:SearchHit|undefined,source=false)=>{
+    const button=(cls:string,key:string,hit:SearchHit|undefined)=>{
      const b=element('button',cls);b.type='button';b.dataset.searchKey=item.id+':'+key;
-     b.onclick=()=>{if(!composing)options.activate(item,hit,source)};
+     b.onclick=()=>{if(!composing)options.activate(item,hit)};
      return b;
     };
     const title=button('search-title','title',item.hits[0]);marked(title,item.title||messages.fUntitledDocument(),item.titleMatch);group.append(title);
@@ -136,8 +136,7 @@ export function createSidebarSearch(options:{
      b.append(element('small','search-line',messages.fSearchLine(hit.line)));
      const snippet=element('span','search-snippet');
      snippet.append(document.createTextNode(hit.before),element('mark','',hit.text),document.createTextNode(hit.after));b.append(snippet);
-     const source=button('search-source','source:'+hit.from,hit,true);source.textContent=messages.fSearchSource();
-     row.append(b,source);group.append(row);
+     row.append(b);group.append(row);
     }
     if(item.moreHits)group.append(element('p','search-more',messages.fSearchMoreHits()));
     if(filtered.excerpt)group.append(element('p','search-excerpt',filtered.excerpt));

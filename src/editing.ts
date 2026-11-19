@@ -1,5 +1,5 @@
 import {messages} from './i18n';
-import {EditorState, type TransactionSpec} from '@codemirror/state';
+import {EditorSelection,EditorState, type TransactionSpec} from '@codemirror/state';
 import {isolateHistory} from '@codemirror/commands';
 import {syntaxTree,ensureSyntaxTree} from '@codemirror/language';
 import type {SyntaxNode} from '@lezer/common';
@@ -11,40 +11,58 @@ export function headingLevel(state:EditorState):number {
  const match=/^[ \t]*(#{1,6})[ \t]+/.exec(state.doc.lineAt(state.selection.main.head).text);
  return match?match[1].length:0;
 }
+function selectedLineNumbers(state:EditorState):number[]{
+ const seen=new Set<number>();
+ for(const sel of state.selection.ranges){
+  const first=state.doc.lineAt(sel.from).number;
+  const last=state.doc.lineAt(Math.max(sel.from,sel.to-(sel.empty?0:1))).number;
+  for(let n=first;n<=last;n++)seen.add(n);
+ }
+ return Array.from(seen).sort((a,b)=>a-b);
+}
 export function setHeading(state:EditorState,level:number,preserveBody=false):TransactionSpec {
- const selection=state.selection.main;
- const first=state.doc.lineAt(selection.from).number;
- const last=state.doc.lineAt(Math.max(selection.from,selection.to-(selection.empty?0:1))).number;
- const changes=state.changes(Array.from({length:last-first+1},(_,i)=>{
-  const line=state.doc.line(first+i),indent=/^[ \t]*/.exec(line.text)![0];
+ const changes=state.changes(selectedLineNumbers(state).map(n=>{
+  const line=state.doc.line(n),indent=/^[ \t]*/.exec(line.text)![0];
   const prefix=preserveBody?'':/^#{1,6}[ \t]+/.exec(line.text.slice(indent.length))?.[0]||'';
   return {from:line.from+indent.length,to:line.from+indent.length+prefix.length,insert:level?'#'.repeat(level)+' ':''};
  }));
  return {changes,selection:state.selection.map(changes,1),userEvent:'input.format'};
 }
 export function blockFormat(state:EditorState,kind:BlockKind,preserveBody=false):TransactionSpec {
- const selection=state.selection.main;
- const first=state.doc.lineAt(selection.from).number;
- const last=state.doc.lineAt(Math.max(selection.from,selection.to-(selection.empty?0:1))).number;
- const lines=Array.from({length:last-first+1},(_,i)=>state.doc.line(first+i));
+ const lines=selectedLineNumbers(state).map(n=>state.doc.line(n));
  const own={heading:/^(\s*)#{1,6}\s+/,quote:/^(\s*)>\s?/,bullet:/^(\s*)[-+*]\s+(?!\[[ xX]\])/,ordered:/^(\s*)\d+[.)]\s+/,task:/^(\s*)[-+*]\s+\[[ xX]\]\s*/}[kind];
- const remove=!preserveBody&&lines.every(l=>!l.text.trim()||own.test(l.text));
- const changes=lines.filter(l=>l.text.trim()||lines.length===1).map((line,i)=>{
+ const remove=!preserveBody&&lines.some(l=>own.test(l.text))&&lines.every(l=>!l.text.trim()||own.test(l.text));
+ const targetLines=lines.filter(l=>l.text.trim()||lines.length===1);
+ const changes=state.changes(targetLines.map((line,i)=>{
   const indent=/^\s*/.exec(line.text)![0];
-  const body=preserveBody?line.text.slice(indent.length):line.text.slice(indent.length).replace(/^(?:#{1,6}\s+|>\s?|[-+*]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/,'');
+  const oldPrefixLen=preserveBody?0:/^(?:#{1,6}[ \t]+|>[ \t]?|[-+*][ \t]+(?:\[[ xX]\][ \t]*)?|\d+[.)][ \t]+)/.exec(line.text.slice(indent.length))?.[0].length||0;
   const prefix=remove?'':{heading:'## ',quote:'> ',bullet:'- ',ordered:`${i+1}. `,task:'- [ ] '}[kind];
-  return {from:line.from,to:line.to,insert:indent+prefix+body};
- });
- return {changes,userEvent:'input.format'};
+  return {from:line.from+indent.length,to:line.from+indent.length+oldPrefixLen,insert:prefix};
+ }));
+ return {changes,selection:state.selection.map(changes,1),userEvent:'input.format'};
 }
 export const inlineMarkers:Record<string,[string,string]>={bold:['**','**'],italic:['_','_'],underline:['<u>','</u>'],strike:['~~','~~'],highlight:['==','=='],inlineCode:['`','`'],superscript:['<sup>','</sup>'],subscript:['<sub>','</sub>']};
 export function wrapSelection(state:EditorState,open:string,close=open):TransactionSpec {
- const {from,to}=state.selection.main,selected=state.sliceDoc(from,to);
- if(from>=open.length&&state.sliceDoc(from-open.length,from)===open&&state.sliceDoc(to,to+close.length)===close)
-  return {changes:[{from:from-open.length,to:from},{from:to,to:to+close.length}],selection:{anchor:from-open.length,head:to-open.length},userEvent:'input.format'};
- const wrapped=selected.length>=open.length+close.length&&selected.startsWith(open)&&selected.endsWith(close);
- const insert=wrapped?selected.slice(open.length,-close.length):open+selected+close,anchor=from+(wrapped?0:open.length);
- return {changes:{from,to,insert},selection:{anchor,head:anchor+(wrapped?insert.length:selected.length)},userEvent:'input.format'};
+ return {
+  ...state.changeByRange(range=>{
+   const {from,to}=range,selected=state.sliceDoc(from,to);
+   if(from>=open.length&&state.sliceDoc(from-open.length,from)===open&&state.sliceDoc(to,to+close.length)===close){
+    return {
+     changes:[{from:from-open.length,to:from},{from:to,to:to+close.length}],
+     range:EditorSelection.range(from-open.length,to-open.length),
+    };
+   }
+   const wrapped=selected.length>=open.length+close.length&&selected.startsWith(open)&&selected.endsWith(close);
+   const insert=wrapped?selected.slice(open.length,-close.length):open+selected+close;
+   const anchor=from+(wrapped?0:open.length);
+   const head=anchor+(wrapped?insert.length:selected.length);
+   return {
+    changes:{from,to,insert},
+    range:EditorSelection.range(anchor,head),
+   };
+  }),
+  userEvent:'input.format',
+ };
 }
 interface InlineWrapper {from:number;to:number;openTo:number;closeFrom:number}
 export function clearFormatting(state:EditorState):TransactionSpec {
@@ -182,7 +200,6 @@ export function headings(state:EditorState,tree=syntaxTree(state)){
   out.push({from:n.from,text,level:Number(n.name.slice(-1))||1,slug:base+(count?'-'+count:'')});return false;
  }} });return out;
 }
-export function tableAt(state:EditorState){let n=syntaxTree(state).resolveInner(state.selection.main.head,-1);for(;n;n=n.parent!){if(n.name==='Table')return {from:n.from,to:n.to,raw:state.sliceDoc(n.from,n.to)}}return null}
 export function splitCells(line:string){
  const s=line.trim();let cells:string[]=[],cell='',escaped=false;
  for(let i=0;i<s.length;i++){const c=s[i];if(c==='|'&&!escaped){cells.push(cell.trim());cell=''}else cell+=c;escaped=c==='\\'&&!escaped;if(c!=='\\')escaped=false;}
@@ -221,4 +238,28 @@ export function insertTable(state:EditorState,range:{from:number;to:number}=stat
  const before=from&&!left.endsWith('\n\n')?left.endsWith('\n')?'\n':'\n\n':'';
  const after=to<state.doc.length?right.startsWith('\n\n')?'':right.startsWith('\n')?'\n':'\n\n':trailing?'\n':'';
  return {changes:{from,to,insert:before+serializeTable([['',''],['','']])+after},selection:{anchor:from+before.length+2},userEvent:'input.table',annotations:isolateHistory.of('full'),scrollIntoView:true};
+}
+export function activeFormats(state:EditorState):Set<string>{
+ const result=new Set<string>(),head=state.selection.main.head,tree=syntaxTree(state);
+ const line=state.doc.lineAt(head);
+ for(const bias of [-1,1] as const){
+  for(let n:SyntaxNode|null=tree.resolveInner(head,bias);n;n=n.parent){
+   if(n.name==='StrongEmphasis')result.add('bold');
+   else if(n.name==='Emphasis')result.add('italic');
+   else if(n.name==='Strikethrough')result.add('strike');
+   else if(n.name==='Highlight')result.add('highlight');
+   else if(n.name==='InlineCode')result.add('inlineCode');
+   else if(n.name==='Blockquote')result.add('quote');
+   else if(n.name==='FencedCode'||n.name==='CodeBlock')result.add('code');
+   else if(n.name==='Link')result.add('link');
+   else if(n.name==='OrderedList')result.add('ordered');
+   else if(n.name==='BulletList')result.add(/^\s*[-+*]\s+\[[ xX]\]/.test(line.text)?'task':'bullet');
+   if(tagHosts.test(n.name)){
+    for(const p of inlineTagPairs(n,(a,b)=>state.sliceDoc(a,b))){
+     if(head>=p.from&&head<=p.to)result.add(p.tag==='u'?'underline':p.tag==='sup'?'superscript':'subscript');
+    }
+   }
+  }
+ }
+ return result;
 }
