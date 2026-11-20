@@ -53,4 +53,4 @@ npx tauri build
 
 ## 开源许可
 
-[MIT](LICENSE)
+[MIT](LICENSE)。本项目基于 [liubai](https://github.com/echoVic/liubai)（MIT，© echoVic）重写演进，原作者版权声明已保留于 LICENSE。
