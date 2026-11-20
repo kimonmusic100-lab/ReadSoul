@@ -1,5 +1,4 @@
-// 本地 SQLite FTS5 (trigram) 全文索引引擎
-// 参考 D:\Percho\ReadSoul search.rs 架构实现并增强：
+// 本地 SQLite FTS5 (trigram) 全文索引引擎：
 // - FTS5 trigram 子串分词（中英文无需词典，支持任意 3+ 字符子串）
 // - 1~2 字符短词自动回退 blocks_raw LIKE 子串扫描并去重合并
 // - 按 Markdown 标题章节切块 + BM25(body=8.0, heading=4.0) 评分

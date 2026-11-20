@@ -1060,7 +1060,7 @@ html.theme-fade :where(.rs-shell,.rs-rail,.rs-main-column,.rs-topbar,.rs-band,#d
  transition:background-color 1s ease;
 }
 
-/* ArcMD-inspired writing feel: smoothed caret glide, auto-pair range tint, inline/block math editing */
+/* Writing feel: smoothed caret glide, auto-pair range tint, inline/block math editing */
 .cm-editor.rs-glide-caret-active .cm-cursor-primary{
  opacity:0!important;
 }
@@ -1240,7 +1240,7 @@ html.theme-fade :where(.rs-shell,.rs-rail,.rs-main-column,.rs-topbar,.rs-band,#d
  to{opacity:1;transform:translate(-50%,0)}
 }
 
-/* Textus-inspired inline mark ghosting, code block language pills, link hover cards & lifted block drag */
+/* Inline mark ghosting, code block language pills, link hover cards & lifted block drag */
 .rs-md-mark-ghost{
  opacity:.42;
  font-weight:400!important;

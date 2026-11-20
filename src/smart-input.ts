@@ -729,7 +729,7 @@ export function createSmartInput(
     }
    }
 
-   // Track range & adjacent enclosure right-boundary during IME composition (Textus enclosure-caret protection).
+   // Track range & adjacent enclosure right-boundary during IME composition (enclosure-caret protection).
    const wasComposing=update.startState.field(composing);
    const nowComposing=update.state.field(composing);
    if(!wasComposing&&nowComposing){
