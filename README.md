@@ -54,3 +54,7 @@ npx tauri build
 ## 开源许可
 
 [MIT](LICENSE)。本项目基于 [liubai](https://github.com/echoVic/liubai)（MIT，© echoVic）重写演进，原作者版权声明已保留于 LICENSE。
+
+## 致谢
+
+交互灵感来自 [Textus](https://github.com/CatVinci-Studio/Textus)、[ArcMD](https://github.com/Ciao1019/ArcMD)。
