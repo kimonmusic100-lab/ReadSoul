@@ -213,15 +213,6 @@ html.rs-chrome-hidden .rs-home-overlay {
   transform: translateY(8px);
 }
 
-.rs-version-tag {
-  font-family: var(--font-code);
-  font-size: 15px;
-  color: var(--muted-foreground);
-  margin-top: 14px;
-  opacity: 0;
-  letter-spacing: 0.06em;
-}
-
 /* 动画播放关键帧 */
 .rs-splash-layer.is-playing .rs-books-group {
   animation: rsBooksAppear 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards;
@@ -258,10 +249,6 @@ html.rs-chrome-hidden .rs-home-overlay {
 
 .rs-splash-layer.is-playing .rs-tagline {
   animation: rsTextRise 1.10s cubic-bezier(0.16, 1, 0.3, 1) 1.45s forwards;
-}
-
-.rs-splash-layer.is-playing .rs-version-tag {
-  animation: rsFadeOnly 0.85s ease-out 1.75s forwards;
 }
 
 .rs-splash-layer.to-home .rs-butterfly-carrier {
@@ -766,9 +753,4 @@ html.rs-chrome-hidden .rs-home-overlay {
 @keyframes rsTextRise {
   0% { opacity: 0; transform: translateY(6px); }
   100% { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes rsFadeOnly {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
 }
